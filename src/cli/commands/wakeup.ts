@@ -12,16 +12,17 @@ export function registerWakeup(program: Command): void {
     .description('Show L0 + L1 wake-up context')
     .option('--wing <wing>', 'Filter L1 to this wing')
     .option('--palace <path>', 'Palace path override')
+    .option('--token-budget <n>', 'Max tokens for L1 output (default 800)', parseInt)
     .option('--json', 'Output structured JSON')
     .option('--quiet', 'Output L0 only')
-    .action(async (opts: { wing?: string; palace?: string; json?: boolean; quiet?: boolean }) => {
+    .action(async (opts: { wing?: string; palace?: string; tokenBudget?: number; json?: boolean; quiet?: boolean }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
 
       const l0 = await loadL0()
       const l1 = opts.quiet
         ? undefined
-        : await generateL1({ palace_path, wing: opts.wing }).catch(() => '(no drawers yet)')
+        : await generateL1({ palace_path, wing: opts.wing, token_budget: opts.tokenBudget }).catch(() => '(no drawers yet)')
 
       const payload = { palace_path, wing: opts.wing, l0, ...(l1 ? { l1 } : {}) }
 
