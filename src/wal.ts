@@ -2,8 +2,15 @@
 import { appendFileSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { join, dirname } from 'path'
+import { findRepoRoot } from './config.js'
 
-const WAL_PATH = join(homedir(), '.nardo', 'wal', 'write_log.jsonl')
+export function getDefaultWalPath(startDir = process.cwd(), home = homedir()): string {
+  const repoRoot = findRepoRoot(startDir)
+  if (repoRoot) {
+    return join(repoRoot, '.nardo', 'wal', 'write_log.jsonl')
+  }
+  return join(home, '.nardo', 'wal', 'write_log.jsonl')
+}
 
 const REDACT_KEYS = new Set([
   'content',
@@ -31,7 +38,8 @@ export async function logWrite(
   params: Record<string, unknown>,
   result: Record<string, unknown>,
 ): Promise<void> {
-  mkdirSync(dirname(WAL_PATH), { recursive: true })
+  const walPath = getDefaultWalPath()
+  mkdirSync(dirname(walPath), { recursive: true })
 
   const entry = {
     timestamp: new Date().toISOString(),
@@ -40,5 +48,5 @@ export async function logWrite(
     result: redact(result),
   }
 
-  appendFileSync(WAL_PATH, JSON.stringify(entry) + '\n', 'utf-8')
+  appendFileSync(walPath, JSON.stringify(entry) + '\n', 'utf-8')
 }

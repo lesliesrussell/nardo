@@ -7,6 +7,7 @@ import {
   getIndexedEmbeddingDimension,
   getProviderEmbeddingDimension,
 } from '../src/config.ts'
+import { getDefaultWalPath } from '../src/wal.ts'
 
 describe('embedding dimension helpers', () => {
   it('provider dimension follows provider defaults', () => {
@@ -42,5 +43,18 @@ describe('palace path defaults', () => {
 
   it('falls back to the home palace outside a git repo', () => {
     expect(getDefaultPalacePath('/tmp/not-a-repo', '/home/test')).toBe('/home/test/.nardo/palace')
+  })
+
+  it('uses repo-local .nardo/wal inside a git repo', () => {
+    const tmp = join(import.meta.dir, '__config_wal_tmp__')
+    rmSync(tmp, { recursive: true, force: true })
+    mkdirSync(join(tmp, '.git'), { recursive: true })
+    mkdirSync(join(tmp, 'nested'), { recursive: true })
+
+    expect(getDefaultWalPath(join(tmp, 'nested'), '/home/test')).toBe(
+      join(tmp, '.nardo', 'wal', 'write_log.jsonl'),
+    )
+
+    rmSync(tmp, { recursive: true, force: true })
   })
 })
