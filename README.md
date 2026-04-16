@@ -152,7 +152,7 @@ The MCP server exposes these tools for Claude Code and other MCP clients:
 | `nardo_status` | Show palace statistics (drawer count, wings, rooms) |
 | `nardo_list_wings` | List all wings in the palace |
 | `nardo_list_rooms` | List rooms, optionally filtered by wing |
-| `nardo_search` | Semantic + keyword hybrid search with MMR diversity control |
+| `nardo_search` | Semantic + keyword hybrid search with MMR, query expansion, federation |
 | `nardo_summarize` | Prose summary with source citations from top passages |
 | `nardo_search_batch` | Parallel multi-query search with deduplication merge |
 | `nardo_suggest_room` | Suggest best room for a text snippet within a wing |
@@ -260,7 +260,7 @@ Options:
 
 The search system combines multiple ranking signals:
 - **Vector similarity** (55%): Cosine distance from embeddings
-- **Keyword ranking** (35%): BM25 relevance
+- **Keyword ranking** (35%): BM25 relevance via SQLite FTS5
 - **Importance decay** (10%): Recent content scores higher
 
 **MMR Reranking**: Control diversity with `mmr_lambda` parameter (0.0–1.0, default 0.7):
@@ -269,6 +269,10 @@ The search system combines multiple ranking signals:
 - 0.0 = pure diversity
 
 **Importance decay**: Content scores decay over time. Configure half-life in days (default 90). Set to 0 to disable.
+
+**Query expansion**: Terse queries are automatically expanded with synonyms before embedding. E.g. `auth` embeds as `auth authentication login jwt session token oauth`. BM25 still uses the original query for precision. Disable with `expand: false`.
+
+**Cross-wing federation**: Set `federated: true` to search all wings regardless of the `wing` filter. Each result is tagged with its origin wing. Useful for "search everything I know about X" queries.
 
 ## Hook Setup
 
@@ -429,6 +433,7 @@ src/
 ├── search/                 # Search engine
 │   ├── hybrid.ts           # BM25 + vector hybrid search
 │   ├── mmr.ts              # MMR reranking
+│   ├── expander.ts         # Query expansion (synonym map)
 │   ├── bm25.ts             # Keyword ranking
 │   ├── dedup.ts            # Deduplication
 │   └── sanitizer.ts        # Query cleaning

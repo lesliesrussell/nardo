@@ -2,6 +2,7 @@ import { PalaceClient } from '../palace/client.js'
 import type { Collection } from '../palace/client.js'
 import { EmbeddingPipeline } from '../embeddings/pipeline.js'
 import { sanitizeQuery } from './sanitizer.js'
+import { expandQuery } from './expander.js'
 import { mmrRerank } from './mmr.js'
 
 export interface SearchOptions {
@@ -14,6 +15,10 @@ export interface SearchOptions {
   mmr_lambda?: number
   /** Importance decay half-life in days (default: 90). Set to 0 to disable decay. */
   decay_halflife?: number
+  /** Expand query with synonyms before embedding (default: true). Improves recall for terse queries. */
+  expand?: boolean
+  /** Search all wings regardless of wing filter (default: false). Results are tagged with their origin wing. */
+  federated?: boolean
 }
 
 export interface SearchResult {
@@ -38,6 +43,10 @@ export interface SearchResponse {
   filters: { wing?: string; room?: string }
   total_before_filter: number
   results: SearchResult[]
+  /** Terms added by query expansion (absent when expansion is disabled or no synonyms found) */
+  expanded_terms?: string[]
+  /** True when wing filter was suppressed for cross-wing federation */
+  federated?: boolean
 }
 
 const RANK_BOOSTS = [0.40, 0.25, 0.15, 0.08, 0.04]
@@ -72,11 +81,16 @@ export class HybridSearcher {
     const sanitized = sanitizeQuery(opts.query)
     const clean_query = sanitized.clean_query
 
-    // Step 2: Embed clean query
-    const embeddings = await this.embedder.embed([clean_query])
+    // Step 2: Optionally expand query with synonyms before embedding
+    const doExpand = opts.expand !== false
+    const expansion = doExpand ? expandQuery(clean_query) : { expanded: clean_query, added_terms: [] }
+    const embed_query = expansion.expanded
+
+    // Step 3: Embed (expanded) query; BM25 uses original clean_query for precision
+    const embeddings = await this.embedder.embed([embed_query])
     const queryEmbedding = embeddings[0]
 
-    const whereFilter = buildWhereFilter(opts.wing, opts.room)
+    const whereFilter = buildWhereFilter(opts.federated ? undefined : opts.wing, opts.room)
 
     const drawersCol = await this.palace_client.getDrawersCollection()
     const closetsCol = await this.palace_client.getClosetsCollection()
@@ -223,6 +237,8 @@ export class HybridSearcher {
       filters: { wing: opts.wing, room: opts.room },
       total_before_filter,
       results,
+      ...(expansion.added_terms.length > 0 ? { expanded_terms: expansion.added_terms } : {}),
+      ...(opts.federated ? { federated: true } : {}),
     }
   }
 }

@@ -106,8 +106,9 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
       max_distance: z.number().optional().describe('Max cosine distance threshold'),
       mmr_lambda: z.number().min(0).max(1).optional().describe('MMR diversity trade-off: 1.0=pure relevance, 0.0=pure diversity (default 0.7)'),
       decay_halflife: z.number().min(0).optional().describe('Importance decay half-life in days (default 90). Set 0 to disable.'),
+      federated: z.boolean().optional().describe('Search all wings regardless of wing filter. Results tagged with origin wing (default false).'),
     },
-    async (input: { query: string; limit?: number; wing?: string; room?: string; max_distance?: number; mmr_lambda?: number; decay_halflife?: number }) => {
+    async (input: { query: string; limit?: number; wing?: string; room?: string; max_distance?: number; mmr_lambda?: number; decay_halflife?: number; federated?: boolean }) => {
       const client = new PalaceClient(palace_path)
       const embedder = getEmbeddingPipeline()
       const searcher = new HybridSearcher(client, embedder)
@@ -120,6 +121,7 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
         max_distance: input.max_distance,
         mmr_lambda: input.mmr_lambda,
         decay_halflife: input.decay_halflife,
+        federated: input.federated,
       })
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }] }
