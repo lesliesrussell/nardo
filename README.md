@@ -76,7 +76,7 @@ nardo mine ~/my_project --wing my_project
 ```
 
 Options:
-- `--palace <path>`: Override palace location. Default is `.nardo/palace` in the current git repo, or `~/.nardo/palace` outside a repo.
+- `--palace <path>`: Override palace location. Default is `.nardo/palace` in the current git repo. nardo requires a git repository.
 - `--wing <name>`: Category name (defaults to project name)
 - `--limit <n>`: Mine only first N files
 - `--dry-run`: Preview without writing
@@ -127,7 +127,7 @@ Use `--palace /path/to/global-palace` only when you explicitly want to point MCP
 | `mcp` | Start MCP server | `nardo mcp` |
 | `repair` | Interactive palace repair | `nardo repair` |
 | `dedup` | Remove near-duplicate drawers | `nardo dedup --threshold 0.15` |
-| `forget` | Delete drawers by filter | `nardo forget --source myfile.txt` |
+| `forget` | Delete drawers by filter | `nardo forget --source-file myfile.txt --dry-run` |
 | `add-drawer` | Manual drawer insertion | `nardo add-drawer --wing w --room r` |
 | `diary` | Add timestamped diary entry | `nardo diary "Shipped v2"` |
 | `watch` | Watch directory for changes | `nardo watch ~/project` |
@@ -197,7 +197,7 @@ WING (Category, e.g., "my_project", "personal_notes")
 
 **WING**: Project or topic category (128 char max, alphanumeric + spaces/dots/hyphens).
 
-**ROOM**: Subcategory within a wing. Detected automatically from folder structure or via `nardo.yaml`.
+**ROOM**: Subcategory within a wing. Auto-detected from directory structure. `src/search/` → room `search`, `tests/` → room `tests`. No configuration required.
 
 **DRAWER**: Immutable chunk identified by content hash. Metadata per drawer:
 - `wing`, `room`: Hierarchy
@@ -221,14 +221,6 @@ WING (Category, e.g., "my_project", "personal_notes")
     └── write_log.jsonl
 ```
 
-Global files still live under `~/.nardo/` for user-scoped settings:
-
-```
-~/.nardo/
-├── config.json               # Optional explicit overrides
-└── identity.txt              # Layer-0 identity text
-```
-
 ### Closets and Knowledge Graph
 
 **Closets**: Compressed topic/entity indices pointing to drawers. Live in a separate HNSW index for fast ranking signals.
@@ -248,7 +240,7 @@ VALUES
 
 ### Memory Wake-up Stack (Layers L0-L3)
 
-**Layer 0**: Identity (~100 tokens). User-written identity in `~/.nardo/identity.txt`.
+**Layer 0**: Identity (~100 tokens). User-written identity in `.nardo/identity.txt` at the repo root.
 
 **Layer 1**: Essential Story (~800 tokens). Top 15 most-important drawers from the palace, grouped by room.
 
@@ -313,7 +305,7 @@ bun run /path/to/nardo/src/mcp/server.ts \
 
 ## Configuration
 
-Location: `~/.nardo/config.json`
+Location: `.nardo/config.json` in the repo root (optional — most settings have sensible defaults).
 
 ```json
 {
@@ -339,7 +331,7 @@ Location: `~/.nardo/config.json`
 
 | Property | Type | Default | Notes |
 |----------|------|---------|-------|
-| `palace_path` | string | repo-local `.nardo/palace` when inside a git repo, else `~/.nardo/palace` | Optional explicit override |
+| `palace_path` | string | `repo-local .nardo/palace (requires git repo)` | Optional explicit override |
 | `collection_name` | string | `nardo_drawers` | Main collection name |
 | `topic_wings` | array | 7 defaults | Default wing categories |
 | `hooks.silent_save` | bool | `true` | Save directly or call MCP |
@@ -354,7 +346,7 @@ nardo status
 ```
 
 This is the main escape hatch when you want a shared or global palace.
-Without an override, `nardo` now prefers `.nardo/palace` in the current git repo.
+Without `NARDO_PALACE_PATH`, nardo uses `.nardo/palace` in the current git repo. Running outside a git repo is an error.
 
 ## Deduplication
 
