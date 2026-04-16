@@ -65,7 +65,12 @@ export function getDefaultPalacePath(startDir = process.cwd()): string {
     return join(repoRoot, '.nardo', 'palace')
   }
   throw new Error(
-    'nardo requires a git repository. Run from inside a git repo or set NARDO_PALACE_PATH.',
+    'nardo: not inside a git repository.\n\n' +
+    'By default, nardo stores your palace at <repo-root>/.nardo/palace.\n' +
+    'To use nardo outside a git repo, point it at a fixed location:\n\n' +
+    '  export NARDO_PALACE_PATH=~/.nardo/palace\n' +
+    '  nardo status\n\n' +
+    'Add that export to your shell profile (~/.zshrc or ~/.bashrc) to make it permanent.',
   )
 }
 

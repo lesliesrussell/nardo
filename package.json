@@ -24,7 +24,7 @@
     "build": "echo 'No build step required — Bun runs TypeScript directly'"
   },
   "bin": {
-    "nardo": "./src/cli/index.ts"
+    "nardo": "./src/cli/main.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

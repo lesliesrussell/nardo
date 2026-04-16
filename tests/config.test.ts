@@ -43,7 +43,7 @@ describe('palace path defaults', () => {
 
   it('throws outside a git repo', () => {
     expect(() => getDefaultPalacePath('/tmp/not-a-repo')).toThrow(
-      'nardo requires a git repository',
+      'nardo: not inside a git repository',
     )
   })
 
@@ -62,7 +62,7 @@ describe('palace path defaults', () => {
 
   it('throws wal path outside a git repo', () => {
     expect(() => getDefaultWalPath('/tmp/not-a-repo')).toThrow(
-      'nardo requires a git repository',
+      'nardo: not inside a git repository',
     )
   })
 })
