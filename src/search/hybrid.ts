@@ -50,6 +50,10 @@ export interface SearchResponse {
 }
 
 const RANK_BOOSTS = [0.40, 0.25, 0.15, 0.08, 0.04]
+// Closets are whole-file summaries — their distances are ~0.15 higher than
+// drawer distances for the same query. Use a separate, looser threshold so
+// closet boosts fire consistently regardless of the caller's max_distance.
+const CLOSET_MAX_DISTANCE = 1.2
 
 function buildWhereFilter(wing?: string, room?: string): Record<string, unknown> | undefined {
   if (room && wing) {
@@ -75,7 +79,6 @@ export class HybridSearcher {
 
   async search(opts: SearchOptions): Promise<SearchResponse> {
     const n_results = opts.n_results ?? 5
-    const max_distance = opts.max_distance ?? 1.5
 
     // Step 1: Sanitize query
     const sanitized = sanitizeQuery(opts.query)
@@ -119,7 +122,7 @@ export class HybridSearcher {
 
     for (let i = 0; i < closetDocs.length; i++) {
       const dist = closetDists[i] ?? 2
-      if (dist >= max_distance) continue
+      if (dist >= CLOSET_MAX_DISTANCE) continue
       const meta = closetMetas[i] ?? {}
       const source_file = (meta.source_file as string) ?? ''
       if (source_file && !closetHits.has(source_file)) {
