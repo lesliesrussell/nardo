@@ -27,7 +27,7 @@ export interface CollectionGetResult {
 }
 
 export type WhereClause =
-  | { [field: string]: { '$eq': unknown } }
+  | { [field: string]: { '$eq': unknown } | { '$prefix': string } }
   | { '$and': WhereClause[] }
 
 export type PalaceBackend = 'sqlite' | 'dolt'
@@ -217,6 +217,10 @@ function whereToSql(where: Record<string, unknown>): SqlWhere {
       if (!ALLOWED_FIELDS.has(field)) throw new Error(`Invalid filter field: ${field}`)
       parts.push(`${field} = ?`)
       params.push((condition as { '$eq': SQLValue })['$eq'])
+    } else if (condition !== null && typeof condition === 'object' && '$prefix' in (condition as object)) {
+      if (!ALLOWED_FIELDS.has(field)) throw new Error(`Invalid filter field: ${field}`)
+      parts.push(`${field} LIKE ?`)
+      params.push((condition as { '$prefix': string })['$prefix'] + '%')
     }
   }
 

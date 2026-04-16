@@ -49,7 +49,7 @@ describe('mineSingleFile — incremental mine', () => {
 
   it('re-mines a changed file and replaces old drawers', async () => {
     const file = join(tmpSrc, 'changing.md')
-    writeFileSync(file, 'Initial content about system design and architecture decisions made by Alice.')
+    writeFileSync(file, 'Initial content about system design and architecture decisions made by Alice. The team chose SQLite for embedded storage because it requires zero operational overhead.')
 
     const first = await mineSingleFile(file, mineOpts)
     expect(first.drawers).toBeGreaterThan(0)

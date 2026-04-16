@@ -10,6 +10,7 @@ export function registerForget(program: Command): void {
     .command('forget')
     .description('Delete drawers from the palace by source file, wing, room, age, or ID')
     .option('--source-file <path>', 'Delete all drawers from this source file')
+    .option('--source-prefix <prefix>', 'Delete all drawers whose source file starts with this prefix (e.g. src/)')
     .option('--wing <name>', 'Delete all drawers in this wing')
     .option('--room <name>', 'Delete all drawers in this room (requires --wing)')
     .option('--before <iso-date>', 'Delete drawers filed before this date (e.g. 2024-01-01)')
@@ -19,6 +20,7 @@ export function registerForget(program: Command): void {
     .action(
       async (opts: {
         sourceFile?: string
+        sourcePrefix?: string
         wing?: string
         room?: string
         before?: string
@@ -30,7 +32,7 @@ export function registerForget(program: Command): void {
         const palace_path = opts.palace ?? config.palace_path
 
         // Validate: at least one selector required
-        if (!opts.sourceFile && !opts.wing && !opts.before && !opts.id) {
+        if (!opts.sourceFile && !opts.sourcePrefix && !opts.wing && !opts.before && !opts.id) {
           console.error('Error: at least one of --source-file, --wing, --before, or --id is required')
           console.error('Use --dry-run to preview before deleting.')
           process.exit(1)
@@ -57,6 +59,7 @@ export function registerForget(program: Command): void {
             client,
             {
               source_file: opts.sourceFile,
+              source_prefix: opts.sourcePrefix,
               wing: opts.wing,
               room: opts.room,
               before: opts.before,

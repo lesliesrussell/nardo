@@ -115,6 +115,7 @@ export async function getAllDrawerMetadata(
 
 export interface ForgetOptions {
   source_file?: string
+  source_prefix?: string
   wing?: string
   room?: string
   /** ISO date string — delete drawers filed before this date */
@@ -149,6 +150,8 @@ export async function forgetDrawers(
 
   if (opts.source_file) {
     where = { source_file: { '$eq': opts.source_file } }
+  } else if (opts.source_prefix) {
+    where = { source_file: { '$prefix': opts.source_prefix } }
   } else if (opts.wing && opts.room) {
     where = { '$and': [{ wing: { '$eq': opts.wing } }, { room: { '$eq': opts.room } }] }
   } else if (opts.wing) {
