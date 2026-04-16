@@ -3,7 +3,6 @@ import { rmSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { PalaceClient } from '../src/palace/client.ts'
 import { addDrawer, deleteDrawer, fileAlreadyMined, deleteDrawersBySource } from '../src/palace/drawers.ts'
-import { saveConfig } from '../src/config.ts'
 import { migrateSqlitePalaceToDolt } from '../src/palace/dolt.ts'
 import { rebuildPalaceIndexes } from '../src/palace/reindex.ts'
 import * as wal from '../src/wal.ts'
@@ -16,8 +15,6 @@ function fakeEmbedding(value: number, dims = 384): number[] {
 }
 
 const TEST_DIR = join(import.meta.dir, '__palace_test_tmp__')
-const TEST_HOME = join(import.meta.dir, '__palace_home_tmp__')
-const ORIGINAL_HOME = process.env['HOME']
 
 function makeClient(): PalaceClient {
   return new PalaceClient(TEST_DIR)
@@ -42,39 +39,16 @@ function makeMetadata(overrides: Partial<{
 }
 
 beforeEach(() => {
-  process.env['HOME'] = TEST_HOME
+  process.env['NARDO_PALACE_PATH'] = TEST_DIR
+  process.env['NARDO_BACKEND'] = 'sqlite'
   rmSync(TEST_DIR, { recursive: true, force: true })
-  rmSync(TEST_HOME, { recursive: true, force: true })
-  mkdirSync(TEST_HOME, { recursive: true })
   mkdirSync(TEST_DIR, { recursive: true })
-  saveConfig({
-    palace_path: TEST_DIR,
-    collection_name: 'nardo_drawers',
-    topic_wings: ['technical'],
-    palace: {
-      backend: 'sqlite',
-      dolt_database: 'nardo',
-    },
-    mining: {
-      auto_kg: true,
-    },
-    embedding: {
-      provider: 'xenova',
-      ollama_url: 'http://localhost:11434',
-      model: 'nomic-embed-text',
-      dimension: 384,
-    },
-    hooks: {
-      silent_save: true,
-      desktop_toast: false,
-    },
-  })
 })
 
 afterEach(() => {
   rmSync(TEST_DIR, { recursive: true, force: true })
-  rmSync(TEST_HOME, { recursive: true, force: true })
-  process.env['HOME'] = ORIGINAL_HOME
+  delete process.env['NARDO_PALACE_PATH']
+  delete process.env['NARDO_BACKEND']
 })
 
 describe('PalaceClient — drawers collection', () => {
@@ -307,28 +281,7 @@ describe('PalaceClient — closets collection', () => {
     expect(migration.drawers).toBe(1)
     expect(migration.closets).toBe(1)
 
-    saveConfig({
-      palace_path: TEST_DIR,
-      collection_name: 'nardo_drawers',
-      topic_wings: ['technical'],
-      palace: {
-        backend: 'dolt',
-        dolt_database: 'nardo',
-      },
-      mining: {
-        auto_kg: true,
-      },
-      embedding: {
-        provider: 'xenova',
-        ollama_url: 'http://localhost:11434',
-        model: 'nomic-embed-text',
-        dimension: 384,
-      },
-      hooks: {
-        silent_save: true,
-        desktop_toast: false,
-      },
-    })
+    process.env['NARDO_BACKEND'] = 'dolt'
 
     await rebuildPalaceIndexes({ palace_path: TEST_DIR, quiet: true })
 

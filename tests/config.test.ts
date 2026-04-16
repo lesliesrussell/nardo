@@ -34,15 +34,17 @@ describe('palace path defaults', () => {
     mkdirSync(join(tmp, 'nested', 'dir'), { recursive: true })
 
     expect(findRepoRoot(join(tmp, 'nested', 'dir'))).toBe(tmp)
-    expect(getDefaultPalacePath(join(tmp, 'nested', 'dir'), '/home/test')).toBe(
+    expect(getDefaultPalacePath(join(tmp, 'nested', 'dir'))).toBe(
       join(tmp, '.nardo', 'palace'),
     )
 
     rmSync(tmp, { recursive: true, force: true })
   })
 
-  it('falls back to the home palace outside a git repo', () => {
-    expect(getDefaultPalacePath('/tmp/not-a-repo', '/home/test')).toBe('/home/test/.nardo/palace')
+  it('throws outside a git repo', () => {
+    expect(() => getDefaultPalacePath('/tmp/not-a-repo')).toThrow(
+      'nardo requires a git repository',
+    )
   })
 
   it('uses repo-local .nardo/wal inside a git repo', () => {
@@ -51,10 +53,16 @@ describe('palace path defaults', () => {
     mkdirSync(join(tmp, '.git'), { recursive: true })
     mkdirSync(join(tmp, 'nested'), { recursive: true })
 
-    expect(getDefaultWalPath(join(tmp, 'nested'), '/home/test')).toBe(
+    expect(getDefaultWalPath(join(tmp, 'nested'))).toBe(
       join(tmp, '.nardo', 'wal', 'write_log.jsonl'),
     )
 
     rmSync(tmp, { recursive: true, force: true })
+  })
+
+  it('throws wal path outside a git repo', () => {
+    expect(() => getDefaultWalPath('/tmp/not-a-repo')).toThrow(
+      'nardo requires a git repository',
+    )
   })
 })

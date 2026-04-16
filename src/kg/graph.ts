@@ -127,7 +127,7 @@ export class KnowledgeGraph {
       `INSERT INTO triples (id, subject, predicate, object, valid_from, valid_to, confidence, source_closet, source_file)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    stmt.run(id, subject, predicate, obj, valid_from, valid_to, confidence, source_closet, source_file)
+    stmt.run(id, canonicalize(subject), predicate, canonicalize(obj), valid_from, valid_to, confidence, source_closet, source_file)
 
     return id
   }

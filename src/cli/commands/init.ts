@@ -1,12 +1,10 @@
 // init command
 import type { Command } from 'commander'
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, readdirSync } from 'fs'
 import { join } from 'path'
-import { homedir } from 'os'
 import * as readline from 'readline'
 import { detectEntities } from '../../entity/detector.js'
 import { dump } from 'js-yaml'
-import { getDefaultPalacePath } from '../../config.js'
 
 function prompt(rl: readline.Interface, question: string): Promise<string> {
   return new Promise(resolve => rl.question(question, resolve))
@@ -112,30 +110,5 @@ export function registerInit(program: Command): void {
       console.log()
       console.log(`  Created: ${yamlPath}`)
 
-      // Create ~/.nardo/config.json if missing
-      const configDir = join(homedir(), '.nardo')
-      const configPath = join(configDir, 'config.json')
-      if (!existsSync(configPath)) {
-        mkdirSync(configDir, { recursive: true })
-        const defaultConfig = {
-          palace_path: getDefaultPalacePath(process.cwd()),
-          collection_name: 'nardo_drawers',
-          palace: {
-            backend: 'sqlite',
-            dolt_database: 'nardo',
-          },
-          mining: {
-            auto_kg: true,
-          },
-          embedding: {
-            provider: 'xenova',
-            ollama_url: 'http://localhost:11434',
-            model: 'nomic-embed-text',
-            dimension: 384,
-          },
-        }
-        writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf-8')
-        console.log(`  Created: ${configPath}`)
-      }
     })
 }

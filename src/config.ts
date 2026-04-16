@@ -1,6 +1,5 @@
 // Config loader
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs'
-import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
 
 export interface NardoConfig {
@@ -27,8 +26,7 @@ export interface NardoConfig {
   }
 }
 
-const DEFAULTS: NardoConfig = {
-  palace_path: join(homedir(), '.nardo', 'palace'),
+const DEFAULTS_WITHOUT_PALACE: Omit<NardoConfig, 'palace_path'> = {
   collection_name: 'nardo_drawers',
   topic_wings: ['emotions', 'consciousness', 'memory', 'technical', 'identity', 'family', 'creative'],
   palace: {
@@ -61,26 +59,33 @@ export function findRepoRoot(startDir = process.cwd()): string | null {
   }
 }
 
-export function getDefaultPalacePath(startDir = process.cwd(), home = homedir()): string {
+export function getDefaultPalacePath(startDir = process.cwd()): string {
   const repoRoot = findRepoRoot(startDir)
   if (repoRoot) {
     return join(repoRoot, '.nardo', 'palace')
   }
-  return join(home, '.nardo', 'palace')
+  throw new Error(
+    'nardo requires a git repository. Run from inside a git repo or set NARDO_PALACE_PATH.',
+  )
 }
 
-function resolvePalacePath(_configPalacePath?: string): string {
-  return process.env['NARDO_PALACE_PATH'] ??
+function resolvePalacePath(): string {
+  return (
+    process.env['NARDO_PALACE_PATH'] ??
     process.env['MEMPAL_PALACE_PATH'] ??
     getDefaultPalacePath()
+  )
 }
 
-export function getConfigPath(): string {
-  return join(homedir(), '.nardo', 'config.json')
+export function getConfigPath(): string | null {
+  const repoRoot = findRepoRoot()
+  if (!repoRoot) return null
+  return join(repoRoot, '.nardo', 'config.json')
 }
 
 function loadRawFileConfig(): Partial<NardoConfig> {
-  const configPath = join(homedir(), '.nardo', 'config.json')
+  const configPath = getConfigPath()
+  if (!configPath) return {}
   try {
     const raw = readFileSync(configPath, 'utf-8')
     return JSON.parse(raw) as Partial<NardoConfig>
@@ -91,26 +96,31 @@ function loadRawFileConfig(): Partial<NardoConfig> {
 
 export function loadConfig(): NardoConfig {
   const fileConfig = loadRawFileConfig()
-  const palace_path = resolvePalacePath(fileConfig.palace_path)
+  const palace_path = resolvePalacePath()
+
+  const backendEnv = process.env['NARDO_BACKEND']
+  const backendOverride: Partial<NardoConfig['palace']> =
+    backendEnv === 'sqlite' || backendEnv === 'dolt' ? { backend: backendEnv } : {}
 
   const merged: NardoConfig = {
-    ...DEFAULTS,
+    ...DEFAULTS_WITHOUT_PALACE,
     ...fileConfig,
     palace_path,
     palace: {
-      ...DEFAULTS.palace,
+      ...DEFAULTS_WITHOUT_PALACE.palace,
       ...(fileConfig.palace ?? {}),
+      ...backendOverride,
     },
     mining: {
-      ...DEFAULTS.mining,
+      ...DEFAULTS_WITHOUT_PALACE.mining,
       ...(fileConfig.mining ?? {}),
     },
     embedding: {
-      ...DEFAULTS.embedding,
+      ...DEFAULTS_WITHOUT_PALACE.embedding,
       ...(fileConfig.embedding ?? {}),
     },
     hooks: {
-      ...DEFAULTS.hooks,
+      ...DEFAULTS_WITHOUT_PALACE.hooks,
       ...(fileConfig.hooks ?? {}),
     },
   }
@@ -122,7 +132,10 @@ export function loadConfig(): NardoConfig {
 
 export function saveConfig(config: NardoConfig): void {
   const configPath = getConfigPath()
-  mkdirSync(join(homedir(), '.nardo'), { recursive: true })
+  if (!configPath) {
+    throw new Error('Cannot save config: not inside a git repository.')
+  }
+  mkdirSync(dirname(configPath), { recursive: true })
   writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
 }
 
@@ -133,7 +146,7 @@ export function getDefaultEmbeddingDimension(provider: 'xenova' | 'ollama'): num
 export function getProviderEmbeddingDimension(
   embedding: Partial<NardoConfig['embedding']> | undefined,
 ): number {
-  return getDefaultEmbeddingDimension(embedding?.provider ?? DEFAULTS.embedding.provider)
+  return getDefaultEmbeddingDimension(embedding?.provider ?? DEFAULTS_WITHOUT_PALACE.embedding.provider)
 }
 
 export function getIndexedEmbeddingDimension(

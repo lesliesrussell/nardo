@@ -1,15 +1,16 @@
 // Write-ahead log
 import { appendFileSync, mkdirSync } from 'fs'
-import { homedir } from 'os'
 import { join, dirname } from 'path'
 import { findRepoRoot } from './config.js'
 
-export function getDefaultWalPath(startDir = process.cwd(), home = homedir()): string {
+export function getDefaultWalPath(startDir = process.cwd()): string {
   const repoRoot = findRepoRoot(startDir)
   if (repoRoot) {
     return join(repoRoot, '.nardo', 'wal', 'write_log.jsonl')
   }
-  return join(home, '.nardo', 'wal', 'write_log.jsonl')
+  throw new Error(
+    'nardo requires a git repository. Run from inside a git repo or set NARDO_PALACE_PATH.',
+  )
 }
 
 const REDACT_KEYS = new Set([
