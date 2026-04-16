@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { chunkText } from '../src/mining/chunker.ts'
+import { chunkFile, chunkText } from '../src/mining/chunker.ts'
 
 describe('chunkText', () => {
   it('basic chunking with known input', () => {
@@ -50,5 +50,48 @@ describe('chunkText', () => {
     const text = 'z'.repeat(3000)
     const chunks = chunkText(text, 800, 100)
     chunks.forEach((c, i) => expect(c.index).toBe(i))
+  })
+
+  it('fixed chunking prefers sentence boundaries near the end', () => {
+    const text = 'A short sentence. Another sentence ends here. Final sentence.'
+    const chunks = chunkText(text, 30, 5, 10)
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(chunks[0].text.endsWith('.')).toBe(true)
+  })
+})
+
+describe('chunkFile', () => {
+  it('chunks markdown on heading boundaries', () => {
+    const text = [
+      '# One',
+      'Alpha '.repeat(180),
+      '',
+      '## Two',
+      'Beta '.repeat(180),
+      '',
+      '## Three',
+      'Gamma '.repeat(180),
+    ].join('\n')
+    const chunks = chunkFile(text, 'notes.md')
+    expect(chunks.length).toBeGreaterThanOrEqual(2)
+    expect(chunks[0].text.startsWith('# One')).toBe(true)
+    expect(chunks.some(chunk => chunk.text.startsWith('## Two'))).toBe(true)
+  })
+
+  it('chunks code on function boundaries', () => {
+    const text = [
+      'function alpha() {',
+      `  return "${'a'.repeat(700)}"`,
+      '}',
+      '',
+      'function beta() {',
+      `  return "${'b'.repeat(700)}"`,
+      '}',
+    ].join('\n')
+
+    const chunks = chunkFile(text, 'example.ts')
+    expect(chunks.length).toBeGreaterThanOrEqual(2)
+    expect(chunks[0].text.startsWith('function alpha')).toBe(true)
+    expect(chunks[1].text.startsWith('function beta')).toBe(true)
   })
 })

@@ -4,7 +4,7 @@ import { PalaceClient } from '../palace/client.ts'
 import { addDrawer, fileAlreadyMined, deleteDrawersBySource } from '../palace/drawers.ts'
 import { buildClosetLines, addClosets, deleteClosetsBySource } from '../palace/closets.ts'
 import { getEmbeddingPipeline } from '../embeddings/pipeline.ts'
-import { chunkText } from './chunker.ts'
+import { chunkFile } from './chunker.ts'
 import { detectRoom } from './room-detector.ts'
 import { computeImportance } from './importance.ts'
 import * as wal from '../wal.ts'
@@ -155,7 +155,7 @@ export async function mineDirectory(
     }
 
     const room = detectRoom(filePath, content, opts.rooms)
-    const chunks = chunkText(content)
+    const chunks = chunkFile(content, filePath)
     if (chunks.length === 0) continue
 
     if (dry_run) {
@@ -257,7 +257,7 @@ export async function mineSingleFile(
   }
 
   const room = detectRoom(filePath, content, opts.rooms)
-  const chunks = chunkText(content)
+  const chunks = chunkFile(content, filePath)
   if (chunks.length === 0) return { drawers: 0, skipped: false, remined: mined }
 
   const embedder = getEmbeddingPipeline()
