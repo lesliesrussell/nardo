@@ -4,6 +4,7 @@ import { PalaceClient } from '../../palace/client.js'
 import { addDrawer } from '../../palace/drawers.js'
 import { getEmbeddingPipeline } from '../../embeddings/pipeline.js'
 import { loadConfig } from '../../config.js'
+import { computeImportance } from '../../mining/importance.js'
 import * as wal from '../../wal.js'
 
 export function registerAddDrawer(program: Command): void {
@@ -15,7 +16,7 @@ export function registerAddDrawer(program: Command): void {
     .option('--content <content>', 'Content to store')
     .option('--content-stdin', 'Read content from stdin instead of --content')
     .option('--source <source>', 'Source identifier', 'cli:add-drawer')
-    .option('--importance <number>', 'Importance score (0-2)', '1.0')
+    .option('--importance <number>', 'Importance score (0-2, default: auto-computed)')
     .option('--palace <path>', 'Palace path override')
     .action(
       async (opts: {
@@ -24,7 +25,7 @@ export function registerAddDrawer(program: Command): void {
         content?: string
         contentStdin?: boolean
         source: string
-        importance: string
+        importance?: string
         palace?: string
       }) => {
         const config = loadConfig()
@@ -68,7 +69,7 @@ export function registerAddDrawer(program: Command): void {
             added_by: 'cli:add-drawer',
             filed_at: now,
             ingest_mode: 'diary' as const,
-            importance: parseFloat(opts.importance),
+            importance: opts.importance !== undefined ? parseFloat(opts.importance) : computeImportance(content),
             chunk_size: content.length,
           }
 

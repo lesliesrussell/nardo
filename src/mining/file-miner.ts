@@ -6,6 +6,7 @@ import { buildClosetLines, addClosets, deleteClosetsBySource } from '../palace/c
 import { getEmbeddingPipeline } from '../embeddings/pipeline.ts'
 import { chunkText } from './chunker.ts'
 import { detectRoom } from './room-detector.ts'
+import { computeImportance } from './importance.ts'
 import * as wal from '../wal.ts'
 
 export const READABLE_EXTENSIONS = new Set([
@@ -186,7 +187,7 @@ export async function mineDirectory(
         added_by: agent,
         filed_at: new Date().toISOString(),
         ingest_mode: 'project' as const,
-        importance: 0.5,
+        importance: computeImportance(chunk.text),
         chunk_size: chunk.text.length,
       }
 
