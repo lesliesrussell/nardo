@@ -15,6 +15,8 @@ import { registerAddDrawer } from './commands/add-drawer.js'
 import { registerForget } from './commands/forget.js'
 import { registerDiary } from './commands/diary.js'
 import { registerWatch } from './commands/watch.js'
+import { registerExport } from './commands/export.js'
+import { registerImport } from './commands/import.js'
 
 const program = new Command()
 
@@ -37,5 +39,7 @@ registerAddDrawer(program)
 registerForget(program)
 registerDiary(program)
 registerWatch(program)
+registerExport(program)
+registerImport(program)
 
 program.parse(process.argv)
