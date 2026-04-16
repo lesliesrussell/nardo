@@ -14,6 +14,11 @@ export function registerRepair(program: Command): void {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
 
+      if (config.palace.backend !== 'sqlite') {
+        console.error('repair commands currently support only the SQLite backend')
+        process.exit(1)
+      }
+
       console.log('Scanning for corrupt entries...')
       let scan
       try {
@@ -74,6 +79,11 @@ export function registerRepair(program: Command): void {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
 
+      if (config.palace.backend !== 'sqlite') {
+        console.error('repair commands currently support only the SQLite backend')
+        process.exit(1)
+      }
+
       const start = Date.now()
       let scan
       try {
@@ -106,6 +116,11 @@ export function registerRepair(program: Command): void {
     .action(async (opts: { confirm?: boolean; palace?: string }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
+
+      if (config.palace.backend !== 'sqlite') {
+        console.error('repair commands currently support only the SQLite backend')
+        process.exit(1)
+      }
 
       let count: number
       try {

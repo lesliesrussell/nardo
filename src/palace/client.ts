@@ -1,11 +1,17 @@
-// PalaceClient — embedded vector store using hnswlib-node + bun:sqlite
+// PalaceClient — vector store using hnswlib-node with sqlite or Dolt SQL backing
 import { Database } from 'bun:sqlite'
-import { HierarchicalNSW } from 'hnswlib-node'
 import { mkdirSync, existsSync } from 'fs'
+import { HierarchicalNSW } from 'hnswlib-node'
 import { join } from 'path'
 import { getIndexedEmbeddingDimension, loadConfig } from '../config.js'
-
-// ─── Public interfaces ────────────────────────────────────────────────────────
+import {
+  DOLT_DDL,
+  interpolateSql,
+  runDolt,
+  runDoltJson,
+  type SQLBindings,
+  type SQLValue,
+} from './dolt.js'
 
 export interface CollectionQueryResult {
   ids: string[][]
@@ -23,6 +29,8 @@ export interface CollectionGetResult {
 export type WhereClause =
   | { [field: string]: { '$eq': unknown } }
   | { '$and': WhereClause[] }
+
+export type PalaceBackend = 'sqlite' | 'dolt'
 
 export interface Collection {
   name: string
@@ -52,24 +60,16 @@ export interface Collection {
   }): Promise<CollectionGetResult>
   delete(args: { ids?: string[]; where?: WhereClause | Record<string, unknown> }): Promise<void>
   count(): Promise<number>
-  /** BM25 scores via SQLite FTS5 for a candidate set of drawer IDs. Returns normalized [0,1] map. */
   fts5Score(ids: string[], query: string): Promise<Map<string, number>>
-  /** Retrieve stored embedding vectors for a set of drawer IDs. Used by MMR reranking. */
   getEmbeddings(ids: string[]): Promise<Map<string, number[]>>
 }
-
-// ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_ELEMENTS = 10000
 const HNSW_M = 16
 const HNSW_EF = 200
 const HNSW_SEED = 100
 
-type SQLBindings = (string | number | boolean | null | bigint | Uint8Array)[]
-
-// ─── SQL DDL ──────────────────────────────────────────────────────────────────
-
-const DDL = `
+const SQLITE_DDL = `
 PRAGMA journal_mode=WAL;
 
 CREATE TABLE IF NOT EXISTS drawers (
@@ -125,7 +125,71 @@ CREATE TRIGGER IF NOT EXISTS drawers_fts_au AFTER UPDATE OF document ON drawers 
 END;
 `
 
-// ─── WHERE clause → SQL translation ──────────────────────────────────────────
+export interface PalaceDB {
+  kind: PalaceBackend
+  exec(sql: string): Promise<void>
+  run(sql: string, params?: SQLBindings): Promise<void>
+  all<T>(sql: string, params?: SQLBindings): Promise<T[]>
+  get<T>(sql: string, params?: SQLBindings): Promise<T | undefined>
+  close(): Promise<void>
+}
+
+class SqlitePalaceDB implements PalaceDB {
+  kind: 'sqlite' = 'sqlite'
+  private db: Database
+
+  constructor(filename: string) {
+    this.db = new Database(filename, { create: true })
+  }
+
+  async exec(sql: string): Promise<void> {
+    this.db.exec(sql)
+  }
+
+  async run(sql: string, params: SQLBindings = []): Promise<void> {
+    this.db.run(sql, params)
+  }
+
+  async all<T>(sql: string, params: SQLBindings = []): Promise<T[]> {
+    return this.db.query<T, SQLBindings>(sql).all(...params)
+  }
+
+  async get<T>(sql: string, params: SQLBindings = []): Promise<T | undefined> {
+    return this.db.query<T, SQLBindings>(sql).get(...params) ?? undefined
+  }
+
+  async close(): Promise<void> {
+    this.db.close()
+  }
+}
+
+class DoltPalaceDB implements PalaceDB {
+  kind: 'dolt' = 'dolt'
+  private repoPath: string
+
+  constructor(repoPath: string) {
+    this.repoPath = repoPath
+  }
+
+  async exec(sql: string): Promise<void> {
+    runDolt(this.repoPath, ['sql', '-q', sql])
+  }
+
+  async run(sql: string, params: SQLBindings = []): Promise<void> {
+    runDolt(this.repoPath, ['sql', '-q', interpolateSql(sql, params)])
+  }
+
+  async all<T>(sql: string, params: SQLBindings = []): Promise<T[]> {
+    return runDoltJson<T>(this.repoPath, sql, params)
+  }
+
+  async get<T>(sql: string, params: SQLBindings = []): Promise<T | undefined> {
+    const rows = await this.all<T>(sql, params)
+    return rows[0]
+  }
+
+  async close(): Promise<void> {}
+}
 
 interface SqlWhere {
   sql: string
@@ -151,36 +215,58 @@ function whereToSql(where: Record<string, unknown>): SqlWhere {
     if (field === '$and') continue
     if (condition !== null && typeof condition === 'object' && '$eq' in (condition as object)) {
       if (!ALLOWED_FIELDS.has(field)) throw new Error(`Invalid filter field: ${field}`)
-      parts.push(`"${field}" = ?`)
-      params.push((condition as { '$eq': string | number | boolean | null | bigint | Uint8Array })['$eq'])
+      parts.push(`${field} = ?`)
+      params.push((condition as { '$eq': SQLValue })['$eq'])
     }
   }
 
   return { sql: parts.join(' AND '), params }
 }
 
-// ─── Next label ───────────────────────────────────────────────────────────────
-
-function nextLabel(db: Database, collection: string): number {
-  db.run(
-    `INSERT INTO label_seq (collection, next_label) VALUES (?, 0)
-     ON CONFLICT(collection) DO NOTHING`,
+async function nextLabel(db: PalaceDB, collection: string): Promise<number> {
+  const existing = await db.get<{ next_label: number }>(
+    `SELECT next_label FROM label_seq WHERE collection = ?`,
     [collection],
   )
-  const row = db.query<{ next_label: number }, [string]>(
-    `SELECT next_label FROM label_seq WHERE collection = ?`,
-  ).get(collection)
-  const label = row?.next_label ?? 0
-  db.run(`UPDATE label_seq SET next_label = ? WHERE collection = ?`, [label + 1, collection])
+  const label = existing?.next_label ?? 0
+  if (!existing) {
+    await db.run(`INSERT INTO label_seq (collection, next_label) VALUES (?, ?)`, [collection, 1])
+  } else {
+    await db.run(`REPLACE INTO label_seq (collection, next_label) VALUES (?, ?)`, [collection, label + 1])
+  }
   return label
 }
 
-// ─── HNSW index loader/initializer ───────────────────────────────────────────
+export async function openPalaceDB(
+  palacePath: string,
+  backend: PalaceBackend = loadConfig().palace.backend,
+): Promise<PalaceDB> {
+  mkdirSync(palacePath, { recursive: true })
+
+  if (backend === 'dolt') {
+    if (!existsSync(join(palacePath, '.dolt'))) {
+      throw new Error(`Dolt backend selected but no .dolt repo found at ${palacePath}; run nardo dolt-init first`)
+    }
+    const db = new DoltPalaceDB(palacePath)
+    await db.exec(DOLT_DDL)
+    return db
+  }
+
+  const db = new SqlitePalaceDB(join(palacePath, 'palace.sqlite3'))
+  await db.exec(SQLITE_DDL)
+
+  const ftsRow = await db.get<{ n: number }>('SELECT count(*) as n FROM drawers_fts')
+  const drawerRow = await db.get<{ n: number }>('SELECT count(*) as n FROM drawers')
+  if ((ftsRow?.n ?? 0) === 0 && (drawerRow?.n ?? 0) > 0) {
+    await db.run(`INSERT INTO drawers_fts(drawers_fts) VALUES('rebuild')`)
+  }
+
+  return db
+}
 
 function loadOrInitIndex(indexPath: string, dimension: number): HierarchicalNSW {
   const index = new HierarchicalNSW('cosine', dimension)
   if (existsSync(indexPath)) {
-    // readIndex is async in the types but works synchronously via sync variant
     index.readIndexSync(indexPath, true)
   } else {
     index.initIndex(MAX_ELEMENTS, HNSW_M, HNSW_EF, HNSW_SEED, true)
@@ -194,15 +280,39 @@ function ensureCapacity(index: HierarchicalNSW): void {
   }
 }
 
-// ─── DrawersCollection implementation ────────────────────────────────────────
+async function lexicalScore(db: PalaceDB, table: 'drawers' | 'closets', ids: string[], query: string): Promise<Map<string, number>> {
+  if (ids.length === 0 || !query.trim()) return new Map()
+  const tokens = query.toLowerCase().match(/[a-z0-9]{2,}/g) ?? []
+  if (tokens.length === 0) return new Map()
+  const ph = ids.map(() => '?').join(', ')
+  const rows = await db.all<{ id: string; document: string }>(
+    `SELECT id, document FROM ${table} WHERE id IN (${ph})`,
+    ids,
+  )
+  const scores = new Map<string, number>()
+  let max = 0
+
+  for (const row of rows) {
+    const text = row.document.toLowerCase()
+    const score = tokens.reduce((sum, token) => sum + (text.includes(token) ? 1 : 0), 0)
+    scores.set(row.id, score)
+    if (score > max) max = score
+  }
+
+  if (max === 0) return new Map()
+  for (const [id, score] of scores) {
+    scores.set(id, score / max)
+  }
+  return scores
+}
 
 class DrawersCollection implements Collection {
   readonly name = 'drawers'
-  private db: Database
+  private db: PalaceDB
   private index: HierarchicalNSW
   private indexPath: string
 
-  constructor(db: Database, index: HierarchicalNSW, indexPath: string) {
+  constructor(db: PalaceDB, index: HierarchicalNSW, indexPath: string) {
     this.db = db
     this.index = index
     this.indexPath = indexPath
@@ -214,13 +324,6 @@ class DrawersCollection implements Collection {
     documents: string[]
     metadatas: Record<string, unknown>[]
   }): Promise<void> {
-    const insert = this.db.prepare<void, SQLBindings>(
-      `INSERT OR REPLACE INTO drawers
-       (id, document, label, wing, room, source_file, source_mtime, chunk_index,
-        normalize_version, added_by, filed_at, ingest_mode, importance, chunk_size)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-
     for (let i = 0; i < args.ids.length; i++) {
       const id = args.ids[i]!
       const doc = args.documents[i]!
@@ -228,26 +331,32 @@ class DrawersCollection implements Collection {
       const embedding = args.embeddings?.[i]
 
       ensureCapacity(this.index)
-      const label = nextLabel(this.db, 'drawers')
+      const label = await nextLabel(this.db, 'drawers')
 
-      insert.run(
-        id, doc, label,
-        meta['wing'] as string ?? '',
-        meta['room'] as string ?? '',
-        meta['source_file'] as string ?? '',
-        meta['source_mtime'] as number ?? 0,
-        meta['chunk_index'] as number ?? 0,
-        meta['normalize_version'] as number ?? 2,
-        meta['added_by'] as string ?? 'cli',
-        meta['filed_at'] as string ?? new Date().toISOString(),
-        meta['ingest_mode'] as string ?? 'project',
-        meta['importance'] as number ?? 1.0,
-        meta['chunk_size'] as number ?? doc.length,
+      await this.db.run(
+        `REPLACE INTO drawers
+         (id, document, label, wing, room, source_file, source_mtime, chunk_index,
+          normalize_version, added_by, filed_at, ingest_mode, importance, chunk_size)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          doc,
+          label,
+          meta['wing'] as string ?? '',
+          meta['room'] as string ?? '',
+          meta['source_file'] as string ?? '',
+          meta['source_mtime'] as number ?? 0,
+          meta['chunk_index'] as number ?? 0,
+          meta['normalize_version'] as number ?? 2,
+          meta['added_by'] as string ?? 'cli',
+          meta['filed_at'] as string ?? new Date().toISOString(),
+          meta['ingest_mode'] as string ?? 'project',
+          meta['importance'] as number ?? 1.0,
+          meta['chunk_size'] as number ?? doc.length,
+        ],
       )
 
-      if (embedding) {
-        this.index.addPoint(embedding, label)
-      }
+      if (embedding) this.index.addPoint(embedding, label)
     }
 
     this.index.writeIndexSync(this.indexPath)
@@ -259,16 +368,14 @@ class DrawersCollection implements Collection {
     documents: string[]
     metadatas: Record<string, unknown>[]
   }): Promise<void> {
-    // Delete existing labels from index before re-inserting
-    const getLabel = this.db.prepare<{ label: number | null }, [string]>(
-      `SELECT label FROM drawers WHERE id = ?`,
-    )
-
     for (let i = 0; i < args.ids.length; i++) {
       const id = args.ids[i]!
-      const existing = getLabel.get(id)
+      const existing = await this.db.get<{ label: number | null }>(
+        `SELECT label FROM drawers WHERE id = ?`,
+        [id],
+      )
       if (existing?.label != null) {
-        try { this.index.markDelete(existing.label) } catch { /* already deleted */ }
+        try { this.index.markDelete(existing.label) } catch {}
       }
     }
 
@@ -281,12 +388,7 @@ class DrawersCollection implements Collection {
     where?: Record<string, unknown>
     include?: string[]
   }): Promise<CollectionQueryResult> {
-    const result: CollectionQueryResult = {
-      ids: [],
-      documents: [],
-      metadatas: [],
-      distances: [],
-    }
+    const result: CollectionQueryResult = { ids: [], documents: [], metadatas: [], distances: [] }
 
     for (const qEmbed of args.queryEmbeddings) {
       const currentCount = this.index.getCurrentCount()
@@ -298,14 +400,10 @@ class DrawersCollection implements Collection {
         continue
       }
 
-      // Over-fetch to account for deleted + WHERE filter
       const fetchK = Math.min(args.nResults * 3, currentCount)
       const knnResult = this.index.searchKnn(qEmbed, fetchK)
-
-      // Map labels → rows
       const labels = knnResult.neighbors
       const distances = knnResult.distances
-
       if (labels.length === 0) {
         result.ids.push([])
         result.documents.push([])
@@ -314,13 +412,12 @@ class DrawersCollection implements Collection {
         continue
       }
 
-      // Build SQL to fetch by labels
       const placeholders = labels.map(() => '?').join(', ')
       let sql = `SELECT id, document, label, wing, room, source_file, source_mtime,
                         chunk_index, normalize_version, added_by, filed_at, ingest_mode,
                         importance, chunk_size
                  FROM drawers WHERE label IN (${placeholders})`
-      const sqlParams: SQLBindings =[...labels]
+      const sqlParams: SQLBindings = [...labels]
 
       if (args.where) {
         const w = whereToSql(args.where)
@@ -330,22 +427,16 @@ class DrawersCollection implements Collection {
         }
       }
 
-      const rows = this.db.query<{
+      const rows = await this.db.all<{
         id: string; document: string; label: number; wing: string; room: string
         source_file: string; source_mtime: number; chunk_index: number
         normalize_version: number; added_by: string; filed_at: string
         ingest_mode: string; importance: number; chunk_size: number
-      }, SQLBindings>(sql).all(...sqlParams)
+      }>(sql, sqlParams)
 
-      // Build label→distance map and label→row map
       const distMap = new Map<number, number>()
-      for (let i = 0; i < labels.length; i++) {
-        distMap.set(labels[i]!, distances[i]!)
-      }
-
-      // Sort rows by distance (preserving knn order)
+      for (let i = 0; i < labels.length; i++) distMap.set(labels[i]!, distances[i]!)
       rows.sort((a, b) => (distMap.get(a.label) ?? 2) - (distMap.get(b.label) ?? 2))
-
       const topRows = rows.slice(0, args.nResults)
 
       result.ids.push(topRows.map(r => r.id))
@@ -383,11 +474,9 @@ class DrawersCollection implements Collection {
     const conditions: string[] = []
 
     if (args.ids && args.ids.length > 0) {
-      const ph = args.ids.map(() => '?').join(', ')
-      conditions.push(`id IN (${ph})`)
+      conditions.push(`id IN (${args.ids.map(() => '?').join(', ')})`)
       params.push(...args.ids)
     }
-
     if (args.where) {
       const w = whereToSql(args.where)
       if (w.sql) {
@@ -395,22 +484,18 @@ class DrawersCollection implements Collection {
         params.push(...w.params)
       }
     }
-
-    if (conditions.length > 0) {
-      sql += ` WHERE ${conditions.join(' AND ')}`
-    }
-
+    if (conditions.length > 0) sql += ` WHERE ${conditions.join(' AND ')}`
     if (args.limit) {
       sql += ` LIMIT ?`
       params.push(args.limit)
     }
 
-    const rows = this.db.query<{
+    const rows = await this.db.all<{
       id: string; document: string; label: number; wing: string; room: string
       source_file: string; source_mtime: number; chunk_index: number
       normalize_version: number; added_by: string; filed_at: string
       ingest_mode: string; importance: number; chunk_size: number
-    }, SQLBindings>(sql).all(...params)
+    }>(sql, params)
 
     return {
       ids: rows.map(r => r.id),
@@ -433,67 +518,60 @@ class DrawersCollection implements Collection {
 
   async delete(args: { ids?: string[]; where?: Record<string, unknown> }): Promise<void> {
     let ids: string[] = []
-
     if (args.ids && args.ids.length > 0) {
       ids = args.ids
     } else if (args.where) {
       const w = whereToSql(args.where)
       if (w.sql) {
-        const rows = this.db.query<{ id: string }, SQLBindings>(
-          `SELECT id FROM drawers WHERE ${w.sql}`,
-        ).all(...w.params)
+        const rows = await this.db.all<{ id: string }>(`SELECT id FROM drawers WHERE ${w.sql}`, w.params)
         ids = rows.map(r => r.id)
       }
     }
-
     if (ids.length === 0) return
 
-    // Get labels to mark deleted in index
     const ph = ids.map(() => '?').join(', ')
-    const rows = this.db.query<{ label: number | null }, SQLBindings>(
+    const rows = await this.db.all<{ label: number | null }>(
       `SELECT label FROM drawers WHERE id IN (${ph})`,
-    ).all(...ids)
-
+      ids,
+    )
     for (const row of rows) {
       if (row.label != null) {
-        try { this.index.markDelete(row.label) } catch { /* already deleted */ }
+        try { this.index.markDelete(row.label) } catch {}
       }
     }
 
-    this.db.run(`DELETE FROM drawers WHERE id IN (${ph})`, ids)
+    await this.db.run(`DELETE FROM drawers WHERE id IN (${ph})`, ids)
     this.index.writeIndexSync(this.indexPath)
   }
 
   async count(): Promise<number> {
-    const row = this.db.query<{ n: number }, []>(`SELECT COUNT(*) as n FROM drawers`).get()
+    const row = await this.db.get<{ n: number }>(`SELECT COUNT(*) as n FROM drawers`)
     return row?.n ?? 0
   }
 
   async fts5Score(ids: string[], query: string): Promise<Map<string, number>> {
     if (ids.length === 0 || !query.trim()) return new Map()
+    if (this.db.kind === 'dolt') {
+      return lexicalScore(this.db, 'drawers', ids, query)
+    }
 
-    // Convert query to FTS5 OR-of-terms: each token wrapped in quotes for exact match
     const tokens = query.toLowerCase().match(/[a-z0-9]{2,}/g) ?? []
     if (tokens.length === 0) return new Map()
     const ftsQuery = tokens.map(t => `"${t}"`).join(' OR ')
-
     const ph = ids.map(() => '?').join(', ')
     let rows: Array<{ id: string; bm25: number }> = []
     try {
-      rows = this.db.query<{ id: string; bm25: number }, SQLBindings>(
+      rows = await this.db.all<{ id: string; bm25: number }>(
         `SELECT id, bm25(drawers_fts) AS bm25
          FROM drawers_fts
          WHERE drawers_fts MATCH ? AND id IN (${ph})`,
-      ).all(ftsQuery, ...ids)
+        [ftsQuery, ...ids],
+      )
     } catch {
-      // FTS5 may throw on malformed query — fall back to zero scores
       return new Map()
     }
-
     if (rows.length === 0) return new Map()
 
-    // FTS5 bm25() returns negative values — more negative = more relevant
-    // Normalize: best (most negative) → 1.0, worst (least negative) → 0.0
     const rawValues = rows.map(r => r.bm25)
     const min = Math.min(...rawValues)
     const max = Math.max(...rawValues)
@@ -508,35 +586,30 @@ class DrawersCollection implements Collection {
 
   async getEmbeddings(ids: string[]): Promise<Map<string, number[]>> {
     if (ids.length === 0) return new Map()
-
     const ph = ids.map(() => '?').join(', ')
-    const rows = this.db.query<{ id: string; label: number }, SQLBindings>(
+    const rows = await this.db.all<{ id: string; label: number }>(
       `SELECT id, label FROM drawers WHERE id IN (${ph})`,
-    ).all(...ids)
-
+      ids,
+    )
     const result = new Map<string, number[]>()
     for (const row of rows) {
       if (row.label == null) continue
       try {
         const vec = this.index.getPoint(row.label)
         if (vec) result.set(row.id, Array.from(vec))
-      } catch {
-        // label may have been marked deleted — skip
-      }
+      } catch {}
     }
     return result
   }
 }
 
-// ─── ClosetsCollection implementation ────────────────────────────────────────
-
 class ClosetsCollection implements Collection {
   readonly name = 'closets'
-  private db: Database
+  private db: PalaceDB
   private index: HierarchicalNSW
   private indexPath: string
 
-  constructor(db: Database, index: HierarchicalNSW, indexPath: string) {
+  constructor(db: PalaceDB, index: HierarchicalNSW, indexPath: string) {
     this.db = db
     this.index = index
     this.indexPath = indexPath
@@ -548,11 +621,6 @@ class ClosetsCollection implements Collection {
     documents: string[]
     metadatas: Record<string, unknown>[]
   }): Promise<void> {
-    const insert = this.db.prepare<void, SQLBindings>(
-      `INSERT OR REPLACE INTO closets (id, document, label, source_file, wing, room)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-
     for (let i = 0; i < args.ids.length; i++) {
       const id = args.ids[i]!
       const doc = args.documents[i]!
@@ -560,22 +628,24 @@ class ClosetsCollection implements Collection {
       const embedding = args.embeddings?.[i]
 
       ensureCapacity(this.index)
-      const label = nextLabel(this.db, 'closets')
-      insert.run(
-        id, doc, label,
-        meta['source_file'] as string ?? '',
-        meta['wing'] as string ?? '',
-        meta['room'] as string ?? '',
+      const label = await nextLabel(this.db, 'closets')
+      await this.db.run(
+        `REPLACE INTO closets (id, document, label, source_file, wing, room)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          doc,
+          label,
+          meta['source_file'] as string ?? '',
+          meta['wing'] as string ?? '',
+          meta['room'] as string ?? '',
+        ],
       )
 
-      if (embedding) {
-        this.index.addPoint(embedding, label)
-      }
+      if (embedding) this.index.addPoint(embedding, label)
     }
 
-    if (args.embeddings) {
-      this.index.writeIndexSync(this.indexPath)
-    }
+    if (args.embeddings) this.index.writeIndexSync(this.indexPath)
   }
 
   async upsert(args: {
@@ -584,18 +654,15 @@ class ClosetsCollection implements Collection {
     documents: string[]
     metadatas: Record<string, unknown>[]
   }): Promise<void> {
-    const getLabel = this.db.prepare<{ label: number | null }, [string]>(
-      `SELECT label FROM closets WHERE id = ?`,
-    )
-
     for (let i = 0; i < args.ids.length; i++) {
-      const id = args.ids[i]!
-      const existing = getLabel.get(id)
+      const existing = await this.db.get<{ label: number | null }>(
+        `SELECT label FROM closets WHERE id = ?`,
+        [args.ids[i]!],
+      )
       if (existing?.label != null && args.embeddings?.[i]) {
-        try { this.index.markDelete(existing.label) } catch { /* already deleted */ }
+        try { this.index.markDelete(existing.label) } catch {}
       }
     }
-
     await this.add(args)
   }
 
@@ -605,12 +672,7 @@ class ClosetsCollection implements Collection {
     where?: Record<string, unknown>
     include?: string[]
   }): Promise<CollectionQueryResult> {
-    const result: CollectionQueryResult = {
-      ids: [],
-      documents: [],
-      metadatas: [],
-      distances: [],
-    }
+    const result: CollectionQueryResult = { ids: [], documents: [], metadatas: [], distances: [] }
 
     for (const qEmbed of args.queryEmbeddings) {
       const currentCount = this.index.getCurrentCount()
@@ -626,7 +688,6 @@ class ClosetsCollection implements Collection {
       const knnResult = this.index.searchKnn(qEmbed, fetchK)
       const labels = knnResult.neighbors
       const distances = knnResult.distances
-
       if (labels.length === 0) {
         result.ids.push([])
         result.documents.push([])
@@ -638,26 +699,23 @@ class ClosetsCollection implements Collection {
       const placeholders = labels.map(() => '?').join(', ')
       let sql = `SELECT id, document, label, source_file, wing, room
                  FROM closets WHERE label IN (${placeholders})`
-      const sqlParams: SQLBindings =[...labels]
+      const params: SQLBindings = [...labels]
 
       if (args.where) {
         const w = whereToSql(args.where)
         if (w.sql) {
           sql += ` AND (${w.sql})`
-          sqlParams.push(...w.params)
+          params.push(...w.params)
         }
       }
 
-      const rows = this.db.query<{
+      const rows = await this.db.all<{
         id: string; document: string; label: number
         source_file: string; wing: string; room: string
-      }, SQLBindings>(sql).all(...sqlParams)
+      }>(sql, params)
 
       const distMap = new Map<number, number>()
-      for (let i = 0; i < labels.length; i++) {
-        distMap.set(labels[i]!, distances[i]!)
-      }
-
+      for (let i = 0; i < labels.length; i++) distMap.set(labels[i]!, distances[i]!)
       rows.sort((a, b) => (distMap.get(a.label) ?? 2) - (distMap.get(b.label) ?? 2))
       const topRows = rows.slice(0, args.nResults)
 
@@ -685,11 +743,9 @@ class ClosetsCollection implements Collection {
     const conditions: string[] = []
 
     if (args.ids && args.ids.length > 0) {
-      const ph = args.ids.map(() => '?').join(', ')
-      conditions.push(`id IN (${ph})`)
+      conditions.push(`id IN (${args.ids.map(() => '?').join(', ')})`)
       params.push(...args.ids)
     }
-
     if (args.where) {
       const w = whereToSql(args.where)
       if (w.sql) {
@@ -697,20 +753,16 @@ class ClosetsCollection implements Collection {
         params.push(...w.params)
       }
     }
-
-    if (conditions.length > 0) {
-      sql += ` WHERE ${conditions.join(' AND ')}`
-    }
-
+    if (conditions.length > 0) sql += ` WHERE ${conditions.join(' AND ')}`
     if (args.limit) {
       sql += ` LIMIT ?`
       params.push(args.limit)
     }
 
-    const rows = this.db.query<{
+    const rows = await this.db.all<{
       id: string; document: string; label: number
       source_file: string; wing: string; room: string
-    }, SQLBindings>(sql).all(...params)
+    }>(sql, params)
 
     return {
       ids: rows.map(r => r.id),
@@ -725,107 +777,88 @@ class ClosetsCollection implements Collection {
 
   async delete(args: { ids?: string[]; where?: Record<string, unknown> }): Promise<void> {
     let ids: string[] = []
-
     if (args.ids && args.ids.length > 0) {
       ids = args.ids
     } else if (args.where) {
       const w = whereToSql(args.where)
       if (w.sql) {
-        const rows = this.db.query<{ id: string }, SQLBindings>(
-          `SELECT id FROM closets WHERE ${w.sql}`,
-        ).all(...w.params)
+        const rows = await this.db.all<{ id: string }>(`SELECT id FROM closets WHERE ${w.sql}`, w.params)
         ids = rows.map(r => r.id)
       }
     }
-
     if (ids.length === 0) return
 
     const ph = ids.map(() => '?').join(', ')
-    const rows = this.db.query<{ label: number | null }, SQLBindings>(
+    const rows = await this.db.all<{ label: number | null }>(
       `SELECT label FROM closets WHERE id IN (${ph})`,
-    ).all(...ids)
-
+      ids,
+    )
     for (const row of rows) {
       if (row.label != null) {
-        try { this.index.markDelete(row.label) } catch { /* already deleted */ }
+        try { this.index.markDelete(row.label) } catch {}
       }
     }
-
-    this.db.run(`DELETE FROM closets WHERE id IN (${ph})`, ids)
+    await this.db.run(`DELETE FROM closets WHERE id IN (${ph})`, ids)
     this.index.writeIndexSync(this.indexPath)
   }
 
   async count(): Promise<number> {
-    const row = this.db.query<{ n: number }, []>(`SELECT COUNT(*) as n FROM closets`).get()
+    const row = await this.db.get<{ n: number }>(`SELECT COUNT(*) as n FROM closets`)
     return row?.n ?? 0
   }
 
-  // Closets are not full-text indexed — BM25 scoring not applicable
-  async fts5Score(_ids: string[], _query: string): Promise<Map<string, number>> {
-    return new Map()
+  async fts5Score(ids: string[], query: string): Promise<Map<string, number>> {
+    return lexicalScore(this.db, 'closets', ids, query)
   }
 
-  // Closets don't support per-chunk embedding retrieval
   async getEmbeddings(_ids: string[]): Promise<Map<string, number[]>> {
     return new Map()
   }
 }
 
-// ─── PalaceClient ─────────────────────────────────────────────────────────────
-
 export class PalaceClient {
   private palace_path: string
   private embeddingDimension: number
-  private db: Database | null = null
+  private backend: PalaceBackend
+  private db: PalaceDB | null = null
   private drawersIndex: HierarchicalNSW | null = null
   private closetsIndex: HierarchicalNSW | null = null
   private drawersCol: DrawersCollection | null = null
   private closetsCol: ClosetsCollection | null = null
 
   constructor(palace_path: string, embeddingDimension?: number) {
+    const config = loadConfig()
     this.palace_path = palace_path
-    this.embeddingDimension = embeddingDimension ?? getIndexedEmbeddingDimension(loadConfig().embedding)
+    this.embeddingDimension = embeddingDimension ?? getIndexedEmbeddingDimension(config.embedding)
+    this.backend = config.palace.backend
   }
 
-  private ensureInit(): void {
+  private async ensureInit(): Promise<void> {
     if (this.db) return
 
-    mkdirSync(this.palace_path, { recursive: true })
-
-    const dbPath = join(this.palace_path, 'palace.sqlite3')
-    this.db = new Database(dbPath, { create: true })
-    this.db.exec(DDL)
-
-    // Populate FTS index for any pre-existing rows (migration for palaces created before FTS5 was added)
-    const ftsRow = this.db.query<{ n: number }, []>('SELECT count(*) as n FROM drawers_fts').get()
-    const drawerRow = this.db.query<{ n: number }, []>('SELECT count(*) as n FROM drawers').get()
-    if ((ftsRow?.n ?? 0) === 0 && (drawerRow?.n ?? 0) > 0) {
-      this.db.run(`INSERT INTO drawers_fts(drawers_fts) VALUES('rebuild')`)
-    }
+    this.db = await openPalaceDB(this.palace_path, this.backend)
 
     const drawersIndexPath = join(this.palace_path, 'drawers.hnsw')
     const closetsIndexPath = join(this.palace_path, 'closets.hnsw')
-
     this.drawersIndex = loadOrInitIndex(drawersIndexPath, this.embeddingDimension)
     this.closetsIndex = loadOrInitIndex(closetsIndexPath, this.embeddingDimension)
-
     this.drawersCol = new DrawersCollection(this.db, this.drawersIndex, drawersIndexPath)
     this.closetsCol = new ClosetsCollection(this.db, this.closetsIndex, closetsIndexPath)
   }
 
   async getDrawersCollection(): Promise<Collection> {
-    this.ensureInit()
+    await this.ensureInit()
     return this.drawersCol!
   }
 
   async getClosetsCollection(): Promise<Collection> {
-    this.ensureInit()
+    await this.ensureInit()
     return this.closetsCol!
   }
 
   invalidateCache(): void {
     if (this.db) {
-      this.db.close()
+      void this.db.close()
       this.db = null
     }
     this.drawersIndex = null

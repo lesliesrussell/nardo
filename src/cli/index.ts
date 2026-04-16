@@ -23,6 +23,7 @@ import { registerCompact } from './commands/compact.js'
 import { registerMineUrl } from './commands/mine-url.js'
 import { registerMineGit } from './commands/mine-git.js'
 import { registerReembed } from './commands/reembed.js'
+import { registerDolt } from './commands/dolt.js'
 
 const program = new Command()
 
@@ -53,5 +54,6 @@ registerCompact(program)
 registerMineUrl(program)
 registerMineGit(program)
 registerReembed(program)
+registerDolt(program)
 
 program.parse(process.argv)

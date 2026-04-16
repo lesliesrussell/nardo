@@ -119,6 +119,10 @@ export function registerInit(program: Command): void {
         const defaultConfig = {
           palace_path: join(configDir, 'palace'),
           collection_name: 'nardo_drawers',
+          palace: {
+            backend: 'sqlite',
+            dolt_database: 'nardo',
+          },
           mining: {
             auto_kg: true,
           },

@@ -1,12 +1,9 @@
 // palace-stats command — storage and index health report
-//
-// Shows drawer counts, wing/room breakdown, index sizes on disk,
-// oldest/newest drawer dates, and FTS5 sync status.
 import type { Command } from 'commander'
 import { statSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { Database } from 'bun:sqlite'
 import { loadConfig } from '../../config.js'
+import { openPalaceDB } from '../../palace/client.js'
 
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -28,57 +25,40 @@ export function registerPalaceStats(program: Command): void {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
       const asJson = opts.json ?? false
+      const sqlitePath = join(palace_path, 'palace.sqlite3')
+      const hasSqlite = existsSync(sqlitePath)
+      const hasDolt = existsSync(join(palace_path, '.dolt'))
 
-      const dbPath = join(palace_path, 'palace.sqlite3')
-      if (!existsSync(dbPath)) {
+      if (!hasSqlite && !hasDolt) {
         console.error(`No palace found at: ${palace_path}`)
         process.exit(1)
       }
 
-      const db = new Database(dbPath, { readonly: true })
-
-      // Total drawer count
-      const totalRow = db.query<{ n: number }, []>('SELECT COUNT(*) as n FROM drawers').get()
-      const totalDrawers = totalRow?.n ?? 0
-
-      // Total closet count
-      const closetRow = db.query<{ n: number }, []>('SELECT COUNT(*) as n FROM closets').get()
-      const totalClosets = closetRow?.n ?? 0
-
-      // FTS5 sync check
-      const ftsRow = db.query<{ n: number }, []>('SELECT COUNT(*) as n FROM drawers_fts').get()
-      const ftsCount = ftsRow?.n ?? 0
-
-      // By wing
-      const byWing = db.query<{ wing: string; n: number }, []>(
+      const db = await openPalaceDB(palace_path, config.palace.backend)
+      const totalDrawers = (await db.get<{ n: number }>('SELECT COUNT(*) as n FROM drawers'))?.n ?? 0
+      const totalClosets = (await db.get<{ n: number }>('SELECT COUNT(*) as n FROM closets'))?.n ?? 0
+      const byWing = await db.all<{ wing: string; n: number }>(
         'SELECT wing, COUNT(*) as n FROM drawers GROUP BY wing ORDER BY n DESC',
-      ).all()
-
-      // By wing + room (top 20)
-      const byRoom = db.query<{ wing: string; room: string; n: number }, []>(
+      )
+      const byRoom = await db.all<{ wing: string; room: string; n: number }>(
         'SELECT wing, room, COUNT(*) as n FROM drawers GROUP BY wing, room ORDER BY n DESC LIMIT 20',
-      ).all()
-
-      // Date range
-      const dates = db.query<{ oldest: string; newest: string }, []>(
+      )
+      const dates = await db.get<{ oldest: string; newest: string }>(
         'SELECT MIN(filed_at) as oldest, MAX(filed_at) as newest FROM drawers',
-      ).get()
-
-      // Importance distribution
-      const importance = db.query<{ avg: number; min: number; max: number }, []>(
+      )
+      const importance = await db.get<{ avg: number; min: number; max: number }>(
         'SELECT AVG(importance) as avg, MIN(importance) as min, MAX(importance) as max FROM drawers',
-      ).get()
-
-      // Ingest mode breakdown
-      const byMode = db.query<{ ingest_mode: string; n: number }, []>(
+      )
+      const byMode = await db.all<{ ingest_mode: string; n: number }>(
         'SELECT ingest_mode, COUNT(*) as n FROM drawers GROUP BY ingest_mode ORDER BY n DESC',
-      ).all()
+      )
+      const ftsCount = db.kind === 'sqlite'
+        ? ((await db.get<{ n: number }>('SELECT COUNT(*) as n FROM drawers_fts'))?.n ?? 0)
+        : null
+      await db.close()
 
-      db.close()
-
-      // File sizes
       const sizes = {
-        'palace.sqlite3': fileSize(dbPath) + fileSize(dbPath + '-shm') + fileSize(dbPath + '-wal'),
+        'palace.sqlite3': fileSize(sqlitePath) + fileSize(sqlitePath + '-shm') + fileSize(sqlitePath + '-wal'),
         'drawers.hnsw': fileSize(join(palace_path, 'drawers.hnsw')),
         'closets.hnsw': fileSize(join(palace_path, 'closets.hnsw')),
         'kg.db': fileSize(join(palace_path, 'kg.db')),
@@ -87,10 +67,11 @@ export function registerPalaceStats(program: Command): void {
 
       const stats = {
         palace_path,
+        backend: config.palace.backend,
         drawers: {
           total: totalDrawers,
           fts5_synced: ftsCount,
-          fts5_drift: totalDrawers - ftsCount,
+          fts5_drift: ftsCount == null ? null : totalDrawers - ftsCount,
         },
         closets: { total: totalClosets },
         dates: {
@@ -114,9 +95,12 @@ export function registerPalaceStats(program: Command): void {
         return
       }
 
-      // Human-readable output
-      console.log(`\nPalace: ${palace_path}\n`)
-      console.log(`Drawers:  ${totalDrawers.toLocaleString()} total | FTS5: ${ftsCount.toLocaleString()} synced${stats.drawers.fts5_drift !== 0 ? ` (drift: ${stats.drawers.fts5_drift})` : ''}`)
+      console.log(`\nPalace: ${palace_path}`)
+      console.log(`Backend: ${config.palace.backend}\n`)
+      const ftsSummary = ftsCount == null
+        ? ''
+        : ` | FTS5: ${ftsCount.toLocaleString()} synced${stats.drawers.fts5_drift !== 0 ? ` (drift: ${stats.drawers.fts5_drift})` : ''}`
+      console.log(`Drawers:  ${totalDrawers.toLocaleString()} total${ftsSummary}`)
       console.log(`Closets:  ${totalClosets.toLocaleString()} total`)
       if (dates?.oldest) {
         console.log(`Dates:    ${dates.oldest.slice(0, 10)} → ${dates.newest?.slice(0, 10)}`)

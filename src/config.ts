@@ -7,6 +7,10 @@ export interface NardoConfig {
   palace_path: string
   collection_name: string
   topic_wings: string[]
+  palace: {
+    backend: 'sqlite' | 'dolt'
+    dolt_database: string
+  }
   mining: {
     auto_kg: boolean
   }
@@ -27,6 +31,10 @@ const DEFAULTS: NardoConfig = {
   palace_path: join(homedir(), '.nardo', 'palace'),
   collection_name: 'nardo_drawers',
   topic_wings: ['emotions', 'consciousness', 'memory', 'technical', 'identity', 'family', 'creative'],
+  palace: {
+    backend: 'sqlite',
+    dolt_database: 'nardo',
+  },
   mining: {
     auto_kg: true,
   },
@@ -72,6 +80,10 @@ export function loadConfig(): NardoConfig {
     ...DEFAULTS,
     ...fileConfig,
     palace_path,
+    palace: {
+      ...DEFAULTS.palace,
+      ...(fileConfig.palace ?? {}),
+    },
     mining: {
       ...DEFAULTS.mining,
       ...(fileConfig.mining ?? {}),

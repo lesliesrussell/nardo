@@ -21,6 +21,11 @@ export function registerReembed(program: Command): void {
       const batch_size = Math.max(1, parseInt(opts.batchSize, 10) || 16)
       const dry_run = opts.dryRun ?? false
 
+      if (config.palace.backend !== 'sqlite') {
+        console.error('nardo reembed currently supports only the SQLite backend')
+        process.exit(1)
+      }
+
       if (dry_run) {
         const preview = await reembedPalace({
           palace_path,

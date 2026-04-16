@@ -3,6 +3,9 @@ import { rmSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { PalaceClient } from '../src/palace/client.ts'
 import { addDrawer, deleteDrawer, fileAlreadyMined, deleteDrawersBySource } from '../src/palace/drawers.ts'
+import { saveConfig } from '../src/config.ts'
+import { migrateSqlitePalaceToDolt } from '../src/palace/dolt.ts'
+import { rebuildPalaceIndexes } from '../src/palace/reindex.ts'
 import * as wal from '../src/wal.ts'
 
 function fakeEmbedding(value: number, dims = 384): number[] {
@@ -13,6 +16,8 @@ function fakeEmbedding(value: number, dims = 384): number[] {
 }
 
 const TEST_DIR = join(import.meta.dir, '__palace_test_tmp__')
+const TEST_HOME = join(import.meta.dir, '__palace_home_tmp__')
+const ORIGINAL_HOME = process.env['HOME']
 
 function makeClient(): PalaceClient {
   return new PalaceClient(TEST_DIR)
@@ -37,12 +42,39 @@ function makeMetadata(overrides: Partial<{
 }
 
 beforeEach(() => {
+  process.env['HOME'] = TEST_HOME
   rmSync(TEST_DIR, { recursive: true, force: true })
+  rmSync(TEST_HOME, { recursive: true, force: true })
+  mkdirSync(TEST_HOME, { recursive: true })
   mkdirSync(TEST_DIR, { recursive: true })
+  saveConfig({
+    palace_path: TEST_DIR,
+    collection_name: 'nardo_drawers',
+    topic_wings: ['technical'],
+    palace: {
+      backend: 'sqlite',
+      dolt_database: 'nardo',
+    },
+    mining: {
+      auto_kg: true,
+    },
+    embedding: {
+      provider: 'xenova',
+      ollama_url: 'http://localhost:11434',
+      model: 'nomic-embed-text',
+      dimension: 384,
+    },
+    hooks: {
+      silent_save: true,
+      desktop_toast: false,
+    },
+  })
 })
 
 afterEach(() => {
   rmSync(TEST_DIR, { recursive: true, force: true })
+  rmSync(TEST_HOME, { recursive: true, force: true })
+  process.env['HOME'] = ORIGINAL_HOME
 })
 
 describe('PalaceClient — drawers collection', () => {
@@ -250,5 +282,65 @@ describe('PalaceClient — closets collection', () => {
     })
 
     expect(result.ids[0]).toContain('c768')
+  })
+
+  it('migrates a sqlite palace to Dolt and remains queryable', async () => {
+    const sqliteClient = makeClient()
+    const embed = fakeEmbedding(0.4)
+    const id = await addDrawer(
+      sqliteClient,
+      embed,
+      'Dolt migration document',
+      makeMetadata({ wing: 'dolt-wing', room: 'dolt-room' }),
+      wal,
+    )
+
+    const closetCol = await sqliteClient.getClosetsCollection()
+    await closetCol.upsert({
+      ids: ['closet-dolt'],
+      documents: ['Dolt|Migration|→' + id],
+      metadatas: [{ source_file: '/tmp/test.md', wing: 'dolt-wing', room: 'dolt-room' }],
+      embeddings: [fakeEmbedding(0.2)],
+    })
+
+    const migration = migrateSqlitePalaceToDolt(TEST_DIR, 'Codex', 'codex@example.com')
+    expect(migration.drawers).toBe(1)
+    expect(migration.closets).toBe(1)
+
+    saveConfig({
+      palace_path: TEST_DIR,
+      collection_name: 'nardo_drawers',
+      topic_wings: ['technical'],
+      palace: {
+        backend: 'dolt',
+        dolt_database: 'nardo',
+      },
+      mining: {
+        auto_kg: true,
+      },
+      embedding: {
+        provider: 'xenova',
+        ollama_url: 'http://localhost:11434',
+        model: 'nomic-embed-text',
+        dimension: 384,
+      },
+      hooks: {
+        silent_save: true,
+        desktop_toast: false,
+      },
+    })
+
+    await rebuildPalaceIndexes({ palace_path: TEST_DIR, quiet: true })
+
+    const doltClient = new PalaceClient(TEST_DIR)
+    const drawers = await doltClient.getDrawersCollection()
+    const result = await drawers.query({
+      queryEmbeddings: [embed],
+      nResults: 1,
+    })
+    expect(result.ids[0]).toContain(id)
+
+    const closets = await doltClient.getClosetsCollection()
+    expect(await closets.count()).toBe(1)
   })
 })
