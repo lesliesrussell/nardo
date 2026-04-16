@@ -1,12 +1,16 @@
 import { statSync, readdirSync, readFileSync, existsSync } from 'fs'
 import { join, extname, relative } from 'path'
+import { loadConfig } from '../config.js'
 import { PalaceClient } from '../palace/client.ts'
 import { addDrawer, fileAlreadyMined, deleteDrawersBySource } from '../palace/drawers.ts'
 import { buildClosetLines, addClosets, deleteClosetsBySource } from '../palace/closets.ts'
 import { getEmbeddingPipeline } from '../embeddings/pipeline.ts'
 import { chunkFile } from './chunker.ts'
+import type { Chunk } from './chunker.ts'
 import { detectRoom } from './room-detector.ts'
 import { computeImportance } from './importance.ts'
+import { detectEntities } from '../entity/detector.js'
+import { KnowledgeGraph } from '../kg/graph.js'
 import * as wal from '../wal.ts'
 
 export const READABLE_EXTENSIONS = new Set([
@@ -33,6 +37,36 @@ export interface MineOptions {
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+
+function getKgPath(palace_path: string): string {
+  return join(palace_path, 'kg.db')
+}
+
+async function populateKnowledgeGraph(
+  palace_path: string,
+  source_file: string,
+  chunks: Chunk[],
+): Promise<void> {
+  const config = loadConfig()
+  if (!config.mining.auto_kg) return
+
+  const kg = new KnowledgeGraph(getKgPath(palace_path))
+  try {
+    for (const chunk of chunks) {
+      const entities = detectEntities(chunk.text)
+      if (entities.length === 0) continue
+
+      const ids = entities.map(entity => kg.upsertEntity(entity.name, { type: entity.type }))
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          kg.addTriple(ids[i]!, 'co-occurs-with', ids[j]!, { source_file })
+        }
+      }
+    }
+  } finally {
+    kg.close()
+  }
+}
 
 function loadGitignorePatterns(dir: string): string[] {
   const gitignorePath = join(dir, '.gitignore')
@@ -199,6 +233,7 @@ export async function mineDirectory(
     // Build and add closets
     const closetLines = buildClosetLines(content, drawer_ids, opts.wing, room)
     await addClosets(client, filePath, closetLines, opts.wing, room)
+    await populateKnowledgeGraph(opts.palace_path, filePath, chunks)
 
     fileCount++
   }
@@ -290,6 +325,7 @@ export async function mineSingleFile(
 
   const closetLines = buildClosetLines(content, drawer_ids, opts.wing, room)
   await addClosets(client, filePath, closetLines, opts.wing, room)
+  await populateKnowledgeGraph(opts.palace_path, filePath, chunks)
 
   return { drawers: drawer_ids.length, skipped: false, remined: mined }
 }

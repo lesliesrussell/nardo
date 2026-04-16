@@ -119,6 +119,9 @@ export function registerInit(program: Command): void {
         const defaultConfig = {
           palace_path: join(configDir, 'palace'),
           collection_name: 'nardo_drawers',
+          mining: {
+            auto_kg: true,
+          },
           embedding: {
             provider: 'xenova',
             ollama_url: 'http://localhost:11434',

@@ -7,6 +7,9 @@ export interface NardoConfig {
   palace_path: string
   collection_name: string
   topic_wings: string[]
+  mining: {
+    auto_kg: boolean
+  }
   embedding: {
     provider: 'xenova' | 'ollama'
     ollama_url: string
@@ -24,6 +27,9 @@ const DEFAULTS: NardoConfig = {
   palace_path: join(homedir(), '.nardo', 'palace'),
   collection_name: 'nardo_drawers',
   topic_wings: ['emotions', 'consciousness', 'memory', 'technical', 'identity', 'family', 'creative'],
+  mining: {
+    auto_kg: true,
+  },
   embedding: {
     provider: 'xenova',
     ollama_url: 'http://localhost:11434',
@@ -66,6 +72,10 @@ export function loadConfig(): NardoConfig {
     ...DEFAULTS,
     ...fileConfig,
     palace_path,
+    mining: {
+      ...DEFAULTS.mining,
+      ...(fileConfig.mining ?? {}),
+    },
     embedding: {
       ...DEFAULTS.embedding,
       ...(fileConfig.embedding ?? {}),

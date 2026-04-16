@@ -59,6 +59,29 @@ export class KnowledgeGraph {
     return id
   }
 
+  upsertEntity(
+    name: string,
+    options?: {
+      type?: 'person' | 'project' | 'concept' | 'place' | 'unknown'
+      properties?: Record<string, unknown>
+    },
+  ): string {
+    const id = canonicalize(name)
+    const type = options?.type ?? 'unknown'
+    const properties = JSON.stringify(options?.properties ?? {})
+
+    const stmt = this.db.prepare(
+      `INSERT INTO entities (id, name, type, properties) VALUES (?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         type = excluded.type,
+         properties = excluded.properties`,
+    )
+    stmt.run(id, name, type, properties)
+
+    return id
+  }
+
   getEntity(name: string): Entity | null {
     const id = canonicalize(name)
     const stmt = this.db.prepare(`SELECT * FROM entities WHERE id = ?`)
