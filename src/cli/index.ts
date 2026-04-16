@@ -13,6 +13,7 @@ import { registerMigrate } from './commands/migrate.js'
 import { registerSplit } from './commands/split.js'
 import { registerAddDrawer } from './commands/add-drawer.js'
 import { registerForget } from './commands/forget.js'
+import { registerDiary } from './commands/diary.js'
 
 const program = new Command()
 
@@ -33,5 +34,6 @@ registerMigrate(program)
 registerSplit(program)
 registerAddDrawer(program)
 registerForget(program)
+registerDiary(program)
 
 program.parse(process.argv)
