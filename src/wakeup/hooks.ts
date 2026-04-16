@@ -27,7 +27,13 @@ export function getClaudePaths(home = homedir()): {
 
 export function getWakeupHookScript(): string {
   return `#!/bin/bash
-PALACE="\${NARDO_PALACE_PATH:-$HOME/.nardo/palace}"
+if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  PALACE_DEFAULT="$git_root/.nardo/palace"
+else
+  PALACE_DEFAULT="$HOME/.nardo/palace"
+fi
+
+PALACE="\${NARDO_PALACE_PATH:-$PALACE_DEFAULT}"
 
 if command -v nardo >/dev/null 2>&1 && [ -d "$PALACE" ]; then
   nardo wake-up --json --wing "$(basename "$PWD")" 2>/dev/null

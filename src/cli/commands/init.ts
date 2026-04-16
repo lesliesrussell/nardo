@@ -6,6 +6,7 @@ import { homedir } from 'os'
 import * as readline from 'readline'
 import { detectEntities } from '../../entity/detector.js'
 import { dump } from 'js-yaml'
+import { getDefaultPalacePath } from '../../config.js'
 
 function prompt(rl: readline.Interface, question: string): Promise<string> {
   return new Promise(resolve => rl.question(question, resolve))
@@ -117,7 +118,7 @@ export function registerInit(program: Command): void {
       if (!existsSync(configPath)) {
         mkdirSync(configDir, { recursive: true })
         const defaultConfig = {
-          palace_path: join(configDir, 'palace'),
+          palace_path: getDefaultPalacePath(process.cwd()),
           collection_name: 'nardo_drawers',
           palace: {
             backend: 'sqlite',

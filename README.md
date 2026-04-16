@@ -76,7 +76,7 @@ nardo mine ~/my_project --wing my_project
 ```
 
 Options:
-- `--palace <path>`: Override default palace location (~/.nardo/palace)
+- `--palace <path>`: Override palace location. Default is `.nardo/palace` in the current git repo, or `~/.nardo/palace` outside a repo.
 - `--wing <name>`: Category name (defaults to project name)
 - `--limit <n>`: Mine only first N files
 - `--dry-run`: Preview without writing
@@ -308,7 +308,7 @@ Location: `~/.nardo/config.json`
 
 ```json
 {
-  "palace_path": "~/.nardo/palace",
+  "palace_path": "/absolute/path/when-you-want-an-explicit-override",
   "collection_name": "nardo_drawers",
   "topic_wings": [
     "emotions",
@@ -330,7 +330,7 @@ Location: `~/.nardo/config.json`
 
 | Property | Type | Default | Notes |
 |----------|------|---------|-------|
-| `palace_path` | string | `~/.nardo/palace` | Palace storage location |
+| `palace_path` | string | repo-local `.nardo/palace` when inside a git repo, else `~/.nardo/palace` | Optional explicit override |
 | `collection_name` | string | `nardo_drawers` | Main collection name |
 | `topic_wings` | array | 7 defaults | Default wing categories |
 | `hooks.silent_save` | bool | `true` | Save directly or call MCP |

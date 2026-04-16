@@ -1,7 +1,7 @@
 // Config loader
-import { readFileSync, mkdirSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
-import { join } from 'path'
+import { dirname, join, resolve } from 'path'
 
 export interface NardoConfig {
   palace_path: string
@@ -50,12 +50,29 @@ const DEFAULTS: NardoConfig = {
   },
 }
 
-function resolvePalacePath(): string {
-  return (
-    process.env['NARDO_PALACE_PATH'] ??
+export function findRepoRoot(startDir = process.cwd()): string | null {
+  let current = resolve(startDir)
+
+  while (true) {
+    if (existsSync(join(current, '.git'))) return current
+    const parent = dirname(current)
+    if (parent === current) return null
+    current = parent
+  }
+}
+
+export function getDefaultPalacePath(startDir = process.cwd(), home = homedir()): string {
+  const repoRoot = findRepoRoot(startDir)
+  if (repoRoot) {
+    return join(repoRoot, '.nardo', 'palace')
+  }
+  return join(home, '.nardo', 'palace')
+}
+
+function resolvePalacePath(_configPalacePath?: string): string {
+  return process.env['NARDO_PALACE_PATH'] ??
     process.env['MEMPAL_PALACE_PATH'] ??
-    DEFAULTS.palace_path
-  )
+    getDefaultPalacePath()
 }
 
 export function getConfigPath(): string {
@@ -74,7 +91,7 @@ function loadRawFileConfig(): Partial<NardoConfig> {
 
 export function loadConfig(): NardoConfig {
   const fileConfig = loadRawFileConfig()
-  const palace_path = resolvePalacePath()
+  const palace_path = resolvePalacePath(fileConfig.palace_path)
 
   const merged: NardoConfig = {
     ...DEFAULTS,
