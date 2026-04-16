@@ -17,6 +17,11 @@ import { registerDiary } from './commands/diary.js'
 import { registerWatch } from './commands/watch.js'
 import { registerExport } from './commands/export.js'
 import { registerImport } from './commands/import.js'
+import { registerMineBeads } from './commands/mine-beads.js'
+import { registerPalaceStats } from './commands/palace-stats.js'
+import { registerCompact } from './commands/compact.js'
+import { registerMineUrl } from './commands/mine-url.js'
+import { registerMineGit } from './commands/mine-git.js'
 
 const program = new Command()
 
@@ -41,5 +46,10 @@ registerDiary(program)
 registerWatch(program)
 registerExport(program)
 registerImport(program)
+registerMineBeads(program)
+registerPalaceStats(program)
+registerCompact(program)
+registerMineUrl(program)
+registerMineGit(program)
 
 program.parse(process.argv)

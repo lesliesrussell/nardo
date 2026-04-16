@@ -12,6 +12,8 @@ export interface SearchOptions {
   max_distance?: number
   /** MMR diversity trade-off: 1.0 = pure relevance, 0.0 = pure diversity (default: 0.7) */
   mmr_lambda?: number
+  /** Importance decay half-life in days (default: 90). Set to 0 to disable decay. */
+  decay_halflife?: number
 }
 
 export interface SearchResult {
@@ -157,7 +159,18 @@ export class HybridSearcher {
 
       const bm25_norm = normBm25Scores.get(id) ?? 0
       const effective_vec_sim = Math.max(0, 1 - effective_distance)
-      const final_score = 0.6 * effective_vec_sim + 0.4 * bm25_norm
+
+      // Importance with optional recency decay: importance * 1/(1 + days_old/halflife)
+      const importance = (meta.importance as number) ?? 0.5
+      const halflife = opts.decay_halflife ?? 90
+      let decayed_importance = importance
+      if (halflife > 0 && meta.filed_at) {
+        const daysOld = (Date.now() - new Date(meta.filed_at as string).getTime()) / 86_400_000
+        decayed_importance = importance * (1 / (1 + daysOld / halflife))
+      }
+
+      // 55% vec_sim + 35% BM25 + 10% decayed importance
+      const final_score = 0.55 * effective_vec_sim + 0.35 * bm25_norm + 0.10 * decayed_importance
 
       const result: SearchResult = {
         text,

@@ -6,11 +6,17 @@ import { mineConversation } from '../../mining/convo-miner.js'
 import { readNardoYaml } from '../../mining/yaml-reader.js'
 import { readdirSync, statSync } from 'fs'
 import { join } from 'path'
+import { PalaceClient } from '../../palace/client.js'
+import { addDrawer } from '../../palace/drawers.js'
+import { getEmbeddingPipeline } from '../../embeddings/pipeline.js'
+import { chunkText } from '../../mining/chunker.js'
+import { computeImportance } from '../../mining/importance.js'
+import * as wal from '../../wal.js'
 
 export function registerMine(program: Command): void {
   program
     .command('mine <path>')
-    .description('Mine project files or conversations into the palace')
+    .description('Mine project files, conversations, or stdin (-) into the palace')
     .option('--palace <path>', 'Palace path override')
     .option('--wing <wing>', 'Wing name override')
     .option('--mode <mode>', 'Ingest mode: project or convos', 'project')
@@ -19,6 +25,8 @@ export function registerMine(program: Command): void {
     .option('--dry-run', 'Preview without writing')
     .option('--no-gitignore', 'Ignore .gitignore patterns')
     .option('--include-ignored <paths>', 'Force-include paths (comma-separated)')
+    .option('--source <id>', 'Source identifier for stdin mode (default: stdin:<timestamp>)')
+    .option('--room <room>', 'Room name for stdin mode (default: stdin)')
     .action(
       async (
         targetPath: string,
@@ -31,10 +39,63 @@ export function registerMine(program: Command): void {
           dryRun?: boolean
           gitignore: boolean
           includeIgnored?: string
+          source?: string
+          room?: string
         },
       ) => {
         const config = loadConfig()
         const palace_path = opts.palace ?? config.palace_path
+
+        // ── Stdin mode ────────────────────────────────────────────────────────
+        if (targetPath === '-') {
+          const wing = opts.wing ?? 'stdin'
+          const room = opts.room ?? 'stdin'
+          const source_file = opts.source ?? `stdin:${new Date().toISOString()}`
+          const dry_run = opts.dryRun ?? false
+
+          // Read all stdin
+          const chunks: Buffer[] = []
+          for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
+          const content = Buffer.concat(chunks).toString('utf-8').trim()
+
+          if (!content) {
+            console.error('No input received on stdin')
+            process.exit(1)
+          }
+
+          console.log(`Mining stdin → ${wing}/${room} (${content.length} chars)`)
+
+          const textChunks = chunkText(content)
+          if (textChunks.length === 0 || dry_run) {
+            console.log(`${dry_run ? '[dry] ' : ''}${textChunks.length} chunks`)
+            return
+          }
+
+          const client = new PalaceClient(palace_path)
+          const embedder = getEmbeddingPipeline()
+          const texts = textChunks.map(c => c.text)
+          const embeddings = await embedder.embed(texts)
+          const mtime = Date.now()
+
+          let filed = 0
+          for (let i = 0; i < textChunks.length; i++) {
+            const embedding = embeddings[i]
+            if (!embedding) continue
+            await addDrawer(client, embedding, textChunks[i]!.text, {
+              wing, room, source_file, source_mtime: mtime,
+              chunk_index: textChunks[i]!.index,
+              normalize_version: 2, added_by: opts.agent,
+              filed_at: new Date().toISOString(),
+              ingest_mode: 'project',
+              importance: computeImportance(textChunks[i]!.text),
+              chunk_size: textChunks[i]!.text.length,
+            }, wal)
+            filed++
+          }
+
+          console.log(`Filed: ${filed} drawers`)
+          return
+        }
         const dry_run = opts.dryRun ?? false
         const limit = opts.limit ? parseInt(opts.limit, 10) : undefined
         const include_ignored = opts.includeIgnored
