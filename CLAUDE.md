@@ -52,18 +52,47 @@ bd close <id>         # Complete work
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+bun test          # run full test suite (142 tests)
+bun run dev       # type check
 ```
 
-## Architecture Overview
+## Nardo + Beads: Mandatory In-Session Usage
 
-_Add a brief overview of your project architecture_
+This project uses nardo as its own memory system. **You must use both tools continuously throughout every session — not just at the start or end.**
 
-## Conventions & Patterns
+### Nardo MCP — Required Usage
 
-_Add your project-specific conventions here_
+**Before starting any task:**
+```
+nardo_search("<what you're about to work on>", wing="nardo")
+```
+
+**When you discover something non-obvious** (a bug, a design decision, a gotcha, an architectural insight):
+```
+nardo_add_drawer(text="<discovery>", wing="nardo", room="<area>")
+```
+
+**When you establish a relationship between concepts** (X depends on Y, X replaced Y, X caused bug in Y):
+```
+nardo_kg_add(type="triple", subject="X", predicate="depends-on", object="Y")
+```
+
+**When search results look weak** (similarity < 0.52 triggers `room_hint`):
+```
+nardo_suggest_room(query="<your query>", wing="nardo")
+# then re-search with room= set
+```
+
+**Rules:**
+- ALWAYS search nardo before starting a task — not after
+- ADD drawers for every significant discovery, fix, or design decision
+- USE `nardo_list_rooms` to orient yourself when starting in an unfamiliar area
+- If nardo gives a `room_hint`, follow it before concluding results are empty
+
+### Beads — Required Usage
+
+- Create a bead BEFORE writing code, not after
+- Close beads immediately when work is complete — not in a batch at the end
+- Use `bd remember` for any insight that should survive across sessions
+- `bd ready` at the start of every session to pick up where you left off
