@@ -39,6 +39,12 @@ If this keeps happening, open an issue:
     process.exit(1)
   }
 
-  // Re-throw non-native errors (e.g. user code bugs) as-is
+  // Known user-facing errors (start with "nardo:") — print clean, no stack
+  if (e instanceof Error && e.message.startsWith('nardo:')) {
+    console.error(e.message)
+    process.exit(1)
+  }
+
+  // Re-throw unknown errors (e.g. user code bugs) as-is
   throw e
 }

@@ -131,7 +131,7 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
 
       // Weak result hint: if best similarity is low, suggest room filtering
       const bestSim = Math.max(0, ...response.results.map(r => r.similarity))
-      if (bestSim < 0.4 && !input.room) {
+      if (bestSim < 0.52 && !input.room) {
         const hinted = {
           ...response,
           room_hint: 'Results may be weak. Try: (1) call nardo_suggest_room with your query to find the best room, then re-run nardo_search with room= set; (2) call nardo_list_rooms to browse available rooms.',

@@ -56,4 +56,12 @@ registerMineGit(program)
 registerReembed(program)
 registerDolt(program)
 
-program.parse(process.argv)
+try {
+  await program.parseAsync(process.argv)
+} catch (e) {
+  if (e instanceof Error && e.message.startsWith('nardo:')) {
+    console.error(e.message)
+    process.exit(1)
+  }
+  throw e
+}
