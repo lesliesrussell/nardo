@@ -9,6 +9,7 @@ Local-first memory system for AI agents. 100% verbatim recall, zero API dependen
 - Semantic and keyword search with hybrid ranking
 - Temporal knowledge graphs with time-aware relationships
 - Background mining pipeline with entity detection
+- Token-efficient MCP transport: pointer mode, token-budgeted wake-up, content-addressed L1 cache
 
 ## Stack
 
@@ -160,7 +161,7 @@ The MCP server exposes these tools for Claude Code and other MCP clients:
 | `nardo_status` | Show palace statistics (drawer count, wings, rooms) |
 | `nardo_list_wings` | List all wings in the palace |
 | `nardo_list_rooms` | List rooms, optionally filtered by wing |
-| `nardo_search` | Semantic + keyword hybrid search with MMR, query expansion, federation |
+| `nardo_search` | Semantic + keyword hybrid search with MMR, query expansion, federation. Supports `mode='pointer'` for metadata-only results (no text body). |
 | `nardo_summarize` | Prose summary with source citations from top passages |
 | `nardo_search_batch` | Parallel multi-query search with deduplication merge |
 | `nardo_suggest_room` | Suggest best room for a text snippet within a wing |
@@ -186,6 +187,50 @@ The MCP server exposes these tools for Claude Code and other MCP clients:
 | Tool | Description |
 |------|-------------|
 | `nardo_reconnect` | Reconnect to palace after connection loss |
+
+## Token Efficiency
+
+nardo is designed to keep prompt payloads small without sacrificing verbatim recall. Three mechanisms work together:
+
+### 1. Pointer mode for MCP search
+
+`nardo_search` accepts a `mode` parameter:
+
+| Mode | What's returned | When to use |
+|------|----------------|-------------|
+| `full` (default) | Complete results including text body | When you need to read the content |
+| `pointer` | Metadata only: `id`, `wing`, `room`, `source_file`, `similarity`, `importance`, `filed_at` | Exploratory queries — scan what exists before deciding what to expand |
+
+Pointer mode is most valuable in multi-step workflows. An agent can run a broad `pointer` search, pick the two or three most relevant results by metadata, then call `nardo_search` again on those specific IDs (or use `nardo_summarize`) to retrieve only what it needs. This avoids loading hundreds of tokens of drawer text for results the agent would have discarded anyway.
+
+```json
+{ "tool": "nardo_search", "query": "auth middleware", "mode": "pointer" }
+```
+
+### 2. Token-budgeted L1 wake-up
+
+L1 adds items until the token budget is exhausted, then stops — it never cuts mid-item. This produces a stable, predictable output size instead of a character-sliced fragment. The default is 800 tokens, tunable per session:
+
+```bash
+nardo wake-up --token-budget 400   # tighter budget for short sessions
+nardo wake-up --token-budget 1600  # more context for deep work
+```
+
+Token estimation uses the standard `ceil(chars / 4)` approximation, which is accurate enough for budget enforcement without requiring a tokenizer dependency.
+
+### 3. Content-addressed L1 cache
+
+L1 output is cached at `.nardo/palace/l1_cache.json`. The cache key is a SHA-256 hash over the sorted top-N drawer fingerprints (`source_file:chunk_index:importance`). When the underlying drawers haven't changed, every `nardo wake-up` call returns byte-identical output.
+
+This matters because Claude's API applies a ~90% token discount to repeated prompt prefixes via prompt caching. A stable L1 output at the start of every session context means nardo's wake-up cost approaches zero on subsequent turns once the prefix is cached. The cache write is fire-and-forget; a write failure falls back to regenerating cleanly.
+
+### How the three work together
+
+A typical efficient workflow:
+1. Session starts → `nardo wake-up` emits L0 + token-budgeted L1 (cache hit → same text → Claude API prompt cache hit)
+2. Agent needs to find relevant memory → `nardo_search mode='pointer'` → scan metadata, ~10× fewer tokens than full results
+3. Agent selects 1-2 relevant drawers → `nardo_search` with `room=` filter on those specific entries → full text only for what's needed
+4. Deep recall needed → `nardo_summarize` or direct search — verbatim content always available, never degraded
 
 ## Architecture
 
@@ -247,7 +292,7 @@ VALUES
 
 **Layer 0**: Identity (~100 tokens). User-written identity in `.nardo/identity.txt` at the repo root.
 
-**Layer 1**: Essential Story (~800 tokens). Top 15 most-important drawers from the palace, grouped by room.
+**Layer 1**: Essential Story (token-budgeted, default 800 tokens). Top 15 most-important drawers, grouped by room. Items are added whole — no mid-item cuts when the budget is reached. Output is content-addressed cached at `.nardo/palace/l1_cache.json`; unchanged drawers produce identical text across calls, enabling Claude API prompt caching at session boundaries.
 
 **Layer 2**: On-Demand Retrieval (~500 tokens per call). Fetch drawers from a specific wing/room.
 
@@ -261,6 +306,7 @@ nardo wake-up
 Options:
 - `--wing <name>`: Filter L1 context to specific wing
 - `--palace <path>`: Override palace location
+- `--token-budget <n>`: Max tokens for L1 output (default 800)
 
 ### Hybrid Search Scoring
 
