@@ -51,6 +51,8 @@ export interface Collection {
   }): Promise<CollectionGetResult>
   delete(args: { ids?: string[]; where?: WhereClause | Record<string, unknown> }): Promise<void>
   count(): Promise<number>
+  /** BM25 scores via SQLite FTS5 for a candidate set of drawer IDs. Returns normalized [0,1] map. */
+  fts5Score(ids: string[], query: string): Promise<Map<string, number>>
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -98,6 +100,27 @@ CREATE TABLE IF NOT EXISTS label_seq (
   collection TEXT PRIMARY KEY,
   next_label INTEGER DEFAULT 0
 );
+
+CREATE VIRTUAL TABLE IF NOT EXISTS drawers_fts USING fts5(
+  id UNINDEXED,
+  document,
+  content='drawers',
+  content_rowid='rowid',
+  tokenize = 'unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER IF NOT EXISTS drawers_fts_ai AFTER INSERT ON drawers BEGIN
+  INSERT INTO drawers_fts(rowid, id, document) VALUES (new.rowid, new.id, new.document);
+END;
+
+CREATE TRIGGER IF NOT EXISTS drawers_fts_ad AFTER DELETE ON drawers BEGIN
+  INSERT INTO drawers_fts(drawers_fts, rowid, id, document) VALUES('delete', old.rowid, old.id, old.document);
+END;
+
+CREATE TRIGGER IF NOT EXISTS drawers_fts_au AFTER UPDATE OF document ON drawers BEGIN
+  INSERT INTO drawers_fts(drawers_fts, rowid, id, document) VALUES('delete', old.rowid, old.id, old.document);
+  INSERT INTO drawers_fts(rowid, id, document) VALUES (new.rowid, new.id, new.document);
+END;
 `
 
 // ─── WHERE clause → SQL translation ──────────────────────────────────────────
@@ -443,6 +466,43 @@ class DrawersCollection implements Collection {
     const row = this.db.query<{ n: number }, []>(`SELECT COUNT(*) as n FROM drawers`).get()
     return row?.n ?? 0
   }
+
+  async fts5Score(ids: string[], query: string): Promise<Map<string, number>> {
+    if (ids.length === 0 || !query.trim()) return new Map()
+
+    // Convert query to FTS5 OR-of-terms: each token wrapped in quotes for exact match
+    const tokens = query.toLowerCase().match(/[a-z0-9]{2,}/g) ?? []
+    if (tokens.length === 0) return new Map()
+    const ftsQuery = tokens.map(t => `"${t}"`).join(' OR ')
+
+    const ph = ids.map(() => '?').join(', ')
+    let rows: Array<{ id: string; bm25: number }> = []
+    try {
+      rows = this.db.query<{ id: string; bm25: number }, SQLBindings>(
+        `SELECT id, bm25(drawers_fts) AS bm25
+         FROM drawers_fts
+         WHERE drawers_fts MATCH ? AND id IN (${ph})`,
+      ).all(ftsQuery, ...ids)
+    } catch {
+      // FTS5 may throw on malformed query — fall back to zero scores
+      return new Map()
+    }
+
+    if (rows.length === 0) return new Map()
+
+    // FTS5 bm25() returns negative values — more negative = more relevant
+    // Normalize: best (most negative) → 1.0, worst (least negative) → 0.0
+    const rawValues = rows.map(r => r.bm25)
+    const min = Math.min(...rawValues)
+    const max = Math.max(...rawValues)
+    const range = max - min
+
+    const result = new Map<string, number>()
+    for (const row of rows) {
+      result.set(row.id, range === 0 ? 1.0 : (max - row.bm25) / range)
+    }
+    return result
+  }
 }
 
 // ─── ClosetsCollection implementation ────────────────────────────────────────
@@ -676,6 +736,11 @@ class ClosetsCollection implements Collection {
     const row = this.db.query<{ n: number }, []>(`SELECT COUNT(*) as n FROM closets`).get()
     return row?.n ?? 0
   }
+
+  // Closets are not full-text indexed — BM25 scoring not applicable
+  async fts5Score(_ids: string[], _query: string): Promise<Map<string, number>> {
+    return new Map()
+  }
 }
 
 // ─── PalaceClient ─────────────────────────────────────────────────────────────
@@ -700,6 +765,13 @@ export class PalaceClient {
     const dbPath = join(this.palace_path, 'palace.sqlite3')
     this.db = new Database(dbPath, { create: true })
     this.db.exec(DDL)
+
+    // Populate FTS index for any pre-existing rows (migration for palaces created before FTS5 was added)
+    const ftsRow = this.db.query<{ n: number }, []>('SELECT count(*) as n FROM drawers_fts').get()
+    const drawerRow = this.db.query<{ n: number }, []>('SELECT count(*) as n FROM drawers').get()
+    if ((ftsRow?.n ?? 0) === 0 && (drawerRow?.n ?? 0) > 0) {
+      this.db.run(`INSERT INTO drawers_fts(drawers_fts) VALUES('rebuild')`)
+    }
 
     const drawersIndexPath = join(this.palace_path, 'drawers.hnsw')
     const closetsIndexPath = join(this.palace_path, 'closets.hnsw')

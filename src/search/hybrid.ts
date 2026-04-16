@@ -2,7 +2,6 @@ import { PalaceClient } from '../palace/client.js'
 import type { Collection } from '../palace/client.js'
 import { EmbeddingPipeline } from '../embeddings/pipeline.js'
 import { sanitizeQuery } from './sanitizer.js'
-import { BM25Scorer } from './bm25.js'
 
 export interface SearchOptions {
   query: string
@@ -121,14 +120,8 @@ export class HybridSearcher {
 
     const total_before_filter = drawerIds.length
 
-    // Build BM25 corpus from fetched drawer texts
-    const bm25Docs = drawerIds.map((id, i) => ({
-      id,
-      text: drawerDocs[i] ?? '',
-    }))
-    const bm25 = new BM25Scorer(bm25Docs)
-    const rawBm25Scores = bm25.scoreAll(clean_query)
-    const normBm25Scores = bm25.normalize(rawBm25Scores)
+    // BM25 scores via SQLite FTS5 — persisted index, unicode-aware, phrase-capable
+    const normBm25Scores = await (drawersCol as Collection).fts5Score(drawerIds, clean_query)
 
     const scored: Array<{ result: SearchResult; final_score: number }> = []
 
