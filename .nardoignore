@@ -1,0 +1,47 @@
+# nardoignore — files and directories nardo should never index
+# Syntax matches .gitignore (patterns, globs, leading / for root-relative)
+
+# Hidden/tooling directories
+.git
+.beads
+.omc
+.claude
+.nardo
+.dolt
+node_modules
+
+# Config and lockfiles — not useful to index
+package.json
+package-lock.json
+bun.lockb
+tsconfig.json
+bunfig.toml
+*.lock
+*.lockb
+
+# Generated / build output
+dist
+build
+coverage
+*.hnsw
+*.sqlite3
+*.sqlite
+*.db
+
+# Binary / media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.woff
+*.woff2
+*.ttf
+*.eot
+
+# Secrets and local config
+.env
+.env.*
+*.pem
+*.key

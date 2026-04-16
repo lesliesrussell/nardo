@@ -86,17 +86,23 @@ async function populateKnowledgeGraph(
   }
 }
 
-function loadGitignorePatterns(dir: string): string[] {
-  const gitignorePath = join(dir, '.gitignore')
-  if (!existsSync(gitignorePath)) return []
+function loadPatternsFromFile(filePath: string): string[] {
+  if (!existsSync(filePath)) return []
   try {
-    return readFileSync(gitignorePath, 'utf-8')
+    return readFileSync(filePath, 'utf-8')
       .split('\n')
       .map((l: string) => l.trim())
       .filter((l: string) => l && !l.startsWith('#'))
   } catch {
     return []
   }
+}
+
+function loadIgnorePatterns(dir: string): string[] {
+  // .nardoignore takes precedence; .gitignore fills the rest
+  const nardoignore = loadPatternsFromFile(join(dir, '.nardoignore'))
+  const gitignore = loadPatternsFromFile(join(dir, '.gitignore'))
+  return [...nardoignore, ...gitignore]
 }
 
 function matchesGitignore(patterns: string[], relPath: string): boolean {
@@ -133,7 +139,8 @@ async function walkDir(
     const relPath = relative(rootDir, fullPath)
 
     if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name)) continue
+      // Skip named skip dirs and all hidden directories (dotdirs)
+      if (SKIP_DIRS.has(entry.name) || entry.name.startsWith('.')) continue
       const sub = await walkDir(fullPath, rootDir, patterns, includeIgnored)
       results.push(...sub)
     } else if (entry.isFile()) {
@@ -171,8 +178,8 @@ export async function mineDirectory(
   const dry_run = opts.dry_run ?? false
   const includeIgnored = opts.include_ignored ?? []
 
-  const gitignorePatterns = loadGitignorePatterns(dir)
-  const allFiles = await walkDir(dir, dir, gitignorePatterns, includeIgnored)
+  const ignorePatterns = loadIgnorePatterns(dir)
+  const allFiles = await walkDir(dir, dir, ignorePatterns, includeIgnored)
 
   const client = new PalaceClient(opts.palace_path)
   const embedder = getEmbeddingPipeline()
