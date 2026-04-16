@@ -16,9 +16,8 @@ import { statSync, renameSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { Database } from 'bun:sqlite'
 import { HierarchicalNSW } from 'hnswlib-node'
-import { loadConfig } from '../../config.js'
+import { getConfiguredEmbeddingDimension, loadConfig } from '../../config.js'
 
-const DIMS = 384
 const HNSW_M = 16
 const HNSW_EF = 200
 const HNSW_SEED = 100
@@ -36,6 +35,7 @@ async function compactCollection(
   db: Database,
   table: 'drawers' | 'closets',
   indexPath: string,
+  dimension: number,
   quiet: boolean,
 ): Promise<{ before: number; after: number; reclaimed: number }> {
   const sizeBefore = fileSize(indexPath)
@@ -46,7 +46,7 @@ async function compactCollection(
   }
 
   // Load existing index
-  const oldIndex = new HierarchicalNSW('cosine', DIMS)
+  const oldIndex = new HierarchicalNSW('cosine', dimension)
   oldIndex.readIndexSync(indexPath, true)
   const oldCount = oldIndex.getCurrentCount()
 
@@ -61,7 +61,7 @@ async function compactCollection(
   }
 
   // Build new index
-  const newIndex = new HierarchicalNSW('cosine', DIMS)
+  const newIndex = new HierarchicalNSW('cosine', dimension)
   newIndex.initIndex(Math.max(rows.length + 100, 1000), HNSW_M, HNSW_EF, HNSW_SEED, true)
 
   const updateLabel = db.prepare<void, [number, string]>(
@@ -117,6 +117,7 @@ export function registerCompact(program: Command): void {
     .action(async (opts: { palace?: string; quiet?: boolean }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
+      const dimension = getConfiguredEmbeddingDimension(config.embedding)
       const quiet = opts.quiet ?? false
 
       const dbPath = join(palace_path, 'palace.sqlite3')
@@ -134,6 +135,7 @@ export function registerCompact(program: Command): void {
         db,
         'drawers',
         join(palace_path, 'drawers.hnsw'),
+        dimension,
         quiet,
       )
 
@@ -142,6 +144,7 @@ export function registerCompact(program: Command): void {
         db,
         'closets',
         join(palace_path, 'closets.hnsw'),
+        dimension,
         quiet,
       )
 

@@ -3,6 +3,7 @@ import { Database } from 'bun:sqlite'
 import { HierarchicalNSW } from 'hnswlib-node'
 import { mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
+import { getConfiguredEmbeddingDimension, loadConfig } from '../config.js'
 
 // ─── Public interfaces ────────────────────────────────────────────────────────
 
@@ -59,7 +60,6 @@ export interface Collection {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DIMS = 384          // all-MiniLM-L6-v2
 const MAX_ELEMENTS = 10000
 const HNSW_M = 16
 const HNSW_EF = 200
@@ -177,8 +177,8 @@ function nextLabel(db: Database, collection: string): number {
 
 // ─── HNSW index loader/initializer ───────────────────────────────────────────
 
-function loadOrInitIndex(indexPath: string): HierarchicalNSW {
-  const index = new HierarchicalNSW('cosine', DIMS)
+function loadOrInitIndex(indexPath: string, dimension: number): HierarchicalNSW {
+  const index = new HierarchicalNSW('cosine', dimension)
   if (existsSync(indexPath)) {
     // readIndex is async in the types but works synchronously via sync variant
     index.readIndexSync(indexPath, true)
@@ -775,14 +775,16 @@ class ClosetsCollection implements Collection {
 
 export class PalaceClient {
   private palace_path: string
+  private embeddingDimension: number
   private db: Database | null = null
   private drawersIndex: HierarchicalNSW | null = null
   private closetsIndex: HierarchicalNSW | null = null
   private drawersCol: DrawersCollection | null = null
   private closetsCol: ClosetsCollection | null = null
 
-  constructor(palace_path: string) {
+  constructor(palace_path: string, embeddingDimension?: number) {
     this.palace_path = palace_path
+    this.embeddingDimension = embeddingDimension ?? getConfiguredEmbeddingDimension(loadConfig().embedding)
   }
 
   private ensureInit(): void {
@@ -804,8 +806,8 @@ export class PalaceClient {
     const drawersIndexPath = join(this.palace_path, 'drawers.hnsw')
     const closetsIndexPath = join(this.palace_path, 'closets.hnsw')
 
-    this.drawersIndex = loadOrInitIndex(drawersIndexPath)
-    this.closetsIndex = loadOrInitIndex(closetsIndexPath)
+    this.drawersIndex = loadOrInitIndex(drawersIndexPath, this.embeddingDimension)
+    this.closetsIndex = loadOrInitIndex(closetsIndexPath, this.embeddingDimension)
 
     this.drawersCol = new DrawersCollection(this.db, this.drawersIndex, drawersIndexPath)
     this.closetsCol = new ClosetsCollection(this.db, this.closetsIndex, closetsIndexPath)

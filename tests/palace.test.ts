@@ -5,11 +5,8 @@ import { PalaceClient } from '../src/palace/client.ts'
 import { addDrawer, deleteDrawer, fileAlreadyMined, deleteDrawersBySource } from '../src/palace/drawers.ts'
 import * as wal from '../src/wal.ts'
 
-// Fake 384-dim embedding (all-MiniLM-L6-v2 output size)
-const DIMS = 384
-
-function fakeEmbedding(value: number): number[] {
-  const v = new Array(DIMS).fill(value) as number[]
+function fakeEmbedding(value: number, dims = 384): number[] {
+  const v = new Array(dims).fill(value) as number[]
   // Normalize so cosine distance is meaningful
   const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0))
   return v.map(x => x / norm)
@@ -234,5 +231,24 @@ describe('PalaceClient — closets collection', () => {
     // Should re-init without error
     const col = await client.getDrawersCollection()
     expect(await col.count()).toBe(0)
+  })
+
+  it('supports a custom embedding dimension for HNSW indexes', async () => {
+    const client = new PalaceClient(TEST_DIR, 768)
+    const col = await client.getDrawersCollection()
+
+    await col.upsert({
+      ids: ['c768'],
+      documents: ['custom dimension document'],
+      metadatas: [{ source_file: '/tmp/f.md', wing: 'w', room: 'r' }],
+      embeddings: [fakeEmbedding(0.25, 768)],
+    })
+
+    const result = await col.query({
+      queryEmbeddings: [fakeEmbedding(0.25, 768)],
+      nResults: 1,
+    })
+
+    expect(result.ids[0]).toContain('c768')
   })
 })

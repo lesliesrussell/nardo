@@ -119,6 +119,11 @@ export function registerInit(program: Command): void {
         const defaultConfig = {
           palace_path: join(configDir, 'palace'),
           collection_name: 'nardo_drawers',
+          embedding: {
+            provider: 'xenova',
+            ollama_url: 'http://localhost:11434',
+            model: 'nomic-embed-text',
+          },
         }
         writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf-8')
         console.log(`  Created: ${configPath}`)
