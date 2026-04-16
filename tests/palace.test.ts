@@ -7,7 +7,7 @@ import { migrateSqlitePalaceToDolt } from '../src/palace/dolt.ts'
 import { rebuildPalaceIndexes } from '../src/palace/reindex.ts'
 import * as wal from '../src/wal.ts'
 
-function fakeEmbedding(value: number, dims = 384): number[] {
+function fakeEmbedding(value: number, dims = 768): number[] {
   const v = new Array(dims).fill(value) as number[]
   // Normalize so cosine distance is meaningful
   const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0))

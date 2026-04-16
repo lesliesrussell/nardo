@@ -7,7 +7,7 @@ import * as wal from '../src/wal.js'
 const tmpPalace = `/tmp/nardo-forget-${Date.now()}`
 
 function fakeEmbedding(): number[] {
-  const arr = Array.from({ length: 384 }, () => Math.random())
+  const arr = Array.from({ length: 768 }, () => Math.random())
   const norm = Math.sqrt(arr.reduce((s, x) => s + x * x, 0))
   return arr.map(x => x / norm)
 }

@@ -381,7 +381,7 @@ describe('E2E: Wake-up L0 + L1', () => {
   const identityPath = `/tmp/nardo-e2e-identity-${Date.now()}.txt`
 
   function fakeEmbedding(): number[] {
-    const arr = Array.from({ length: 384 }, () => Math.random())
+    const arr = Array.from({ length: 768 }, () => Math.random())
     // L2 normalize
     const norm = Math.sqrt(arr.reduce((s, x) => s + x * x, 0))
     return arr.map(x => x / norm)
