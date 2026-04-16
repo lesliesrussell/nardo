@@ -6,7 +6,7 @@ import { getEmbeddingPipeline } from '../../embeddings/pipeline.js'
 
 export function registerMaintenanceTools(server: McpServer, palace_path: string): void {
   // nardo_reconnect
-  server.tool('nardo_reconnect', {}, async () => {
+  server.tool('nardo_reconnect', 'Reconnect palace handles and clear cached clients', {}, async () => {
     const client = new PalaceClient(palace_path)
     client.invalidateCache()
 
@@ -17,6 +17,7 @@ export function registerMaintenanceTools(server: McpServer, palace_path: string)
   // nardo_check_duplicate
   server.tool(
     'nardo_check_duplicate',
+    'Check whether content is a near-duplicate of an existing drawer',
     {
       content: z.string().describe('Content to check for duplicates'),
       wing: z.string().optional().describe('Limit search to this wing'),

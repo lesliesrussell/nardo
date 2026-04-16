@@ -12,6 +12,7 @@ export function registerKgTools(server: McpServer, palace_path: string): void {
   // nardo_kg_query
   server.tool(
     'nardo_kg_query',
+    'Query an entity and its relationships from the knowledge graph',
     {
       entity_name: z.string().describe('Entity name to query'),
       as_of: z.string().optional().describe('ISO timestamp for temporal query'),
@@ -40,6 +41,7 @@ export function registerKgTools(server: McpServer, palace_path: string): void {
   // nardo_kg_add
   server.tool(
     'nardo_kg_add',
+    'Add a knowledge graph triple',
     {
       subject: z.string().describe('Subject entity'),
       predicate: z.string().describe('Relationship predicate'),
@@ -79,6 +81,7 @@ export function registerKgTools(server: McpServer, palace_path: string): void {
   // nardo_kg_invalidate
   server.tool(
     'nardo_kg_invalidate',
+    'Invalidate an existing knowledge graph triple',
     {
       subject: z.string().describe('Subject entity'),
       predicate: z.string().describe('Relationship predicate'),

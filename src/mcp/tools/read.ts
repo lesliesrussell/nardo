@@ -8,7 +8,7 @@ import { getEmbeddingPipeline } from '../../embeddings/pipeline.js'
 
 export function registerReadTools(server: McpServer, palace_path: string): void {
   // nardo_status
-  server.tool('nardo_status', {}, async () => {
+  server.tool('nardo_status', 'Show high-level palace status', {}, async () => {
     const client = new PalaceClient(palace_path)
     const all = await getAllDrawerMetadata(client)
 
@@ -35,7 +35,7 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
   })
 
   // nardo_list_wings
-  server.tool('nardo_list_wings', {}, async () => {
+  server.tool('nardo_list_wings', 'List wings and their drawer counts', {}, async () => {
     const client = new PalaceClient(palace_path)
     const all = await getAllDrawerMetadata(client)
 
@@ -51,6 +51,7 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
   // nardo_list_rooms
   server.tool(
     'nardo_list_rooms',
+    'List rooms, optionally filtered by wing',
     {
       wing: z.string().optional().describe('Filter to this wing (optional)'),
     },
@@ -80,7 +81,7 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
   )
 
   // nardo_get_taxonomy
-  server.tool('nardo_get_taxonomy', {}, async () => {
+  server.tool('nardo_get_taxonomy', 'Show wing and room taxonomy counts', {}, async () => {
     const client = new PalaceClient(palace_path)
     const all = await getAllDrawerMetadata(client)
 
@@ -98,6 +99,7 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
   // nardo_search
   server.tool(
     'nardo_search',
+    'Search palace drawers semantically',
     {
       query: z.string().describe('Search query'),
       limit: z.number().optional().describe('Max results (default 5)'),
@@ -131,6 +133,7 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
   // nardo_summarize
   server.tool(
     'nardo_summarize',
+    'Summarize retrieved passages for a query',
     {
       query: z.string().describe('Topic or question to summarize'),
       limit: z.number().optional().describe('Number of passages to synthesize (default 8)'),
@@ -187,6 +190,7 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
   // nardo_search_batch
   server.tool(
     'nardo_search_batch',
+    'Run and merge multiple semantic searches',
     {
       queries: z.array(z.string()).min(1).max(10).describe('Array of search queries (max 10)'),
       limit: z.number().optional().describe('Max results per query before merge (default 5)'),
@@ -254,6 +258,7 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
   // nardo_suggest_room
   server.tool(
     'nardo_suggest_room',
+    'Suggest matching rooms for a text snippet within a wing',
     {
       text: z.string().describe('Text snippet to find the best room for'),
       wing: z.string().describe('Wing to search within'),

@@ -23,6 +23,7 @@ export function registerWriteTools(server: McpServer, palace_path: string): void
   // nardo_add_drawer
   server.tool(
     'nardo_add_drawer',
+    'Add a drawer to the palace',
     {
       wing: z.string().describe('Wing name'),
       room: z.string().describe('Room name'),
@@ -100,6 +101,7 @@ export function registerWriteTools(server: McpServer, palace_path: string): void
   // nardo_delete_drawer
   server.tool(
     'nardo_delete_drawer',
+    'Delete a drawer from the palace',
     {
       drawer_id: z.string().describe('Drawer ID to delete'),
     },
