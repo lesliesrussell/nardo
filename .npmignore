@@ -1,0 +1,15 @@
+# Dev files
+.beads/
+.omc/
+.claude/
+tests/
+tsconfig.json
+AGENTS.md
+CLAUDE.md
+
+# Build artifacts
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+*.hnsw

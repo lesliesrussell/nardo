@@ -1,0 +1,11 @@
+wing: .
+rooms:
+  tests:
+    keywords:
+      - tests
+  hooks:
+    keywords:
+      - hooks
+  src:
+    keywords:
+      - src
