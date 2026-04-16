@@ -17,7 +17,7 @@ Local-first memory system for AI agents. 100% verbatim recall, zero API dependen
 | **Runtime** | Bun | Native TypeScript, built-in test runner, `bun:sqlite` |
 | **Language** | TypeScript | Type safety, first-class MCP SDK support |
 | **Vector Store** | hnswlib-node | HNSW cosine index (custom SQLite integration) |
-| **Embeddings** | @xenova/transformers | Local ONNX runtime (Xenova/all-MiniLM-L6-v2) |
+| **Embeddings** | ollama / @xenova/transformers | ollama (recommended): nomic-embed-text 768-dim. Fallback: Xenova/all-MiniLM-L6-v2 384-dim |
 | **Knowledge Graph** | bun:sqlite | Embedded temporal KG, zero ops |
 | **MCP Server** | @modelcontextprotocol/sdk | Claude-native memory interface |
 | **CLI** | commander | Command-line interface |
@@ -27,8 +27,12 @@ Local-first memory system for AI agents. 100% verbatim recall, zero API dependen
 ### Prerequisites
 
 - Bun >= 1.0.0 ([install](https://bun.sh))
-- 2GB+ disk space (for embeddings model cache)
 - macOS/Linux: Xcode CLT or build-essential (required by `hnswlib-node` native bindings)
+- **Recommended**: [ollama](https://ollama.com) with `nomic-embed-text` for best retrieval quality:
+  ```bash
+  ollama pull nomic-embed-text
+  ```
+  Without ollama, nardo falls back to the bundled Xenova/all-MiniLM-L6-v2 model (~150MB download on first run, stored in `~/.cache/huggingface/`).
 
 ### Install from npm (recommended)
 
@@ -61,8 +65,6 @@ bun link
 nardo status
 ```
 
-On first run, the embedding model downloads to `~/.cache/huggingface/` (~150MB, one-time).
-
 > **Uninstall**: `bun remove -g nardo` or `npm uninstall -g nardo`.
 
 ## Quick Start
@@ -81,6 +83,8 @@ Options:
 - `--limit <n>`: Mine only first N files
 - `--dry-run`: Preview without writing
 - `--no-gitignore`: Ignore .gitignore patterns
+
+Create a `.nardoignore` file in the project root to exclude files from mining (same syntax as `.gitignore`, takes precedence over `.gitignore`).
 
 ### 2. Search the Palace
 
@@ -133,6 +137,7 @@ Use `--palace /path/to/global-palace` only when you explicitly want to point MCP
 | `watch` | Watch directory for changes | `nardo watch ~/project` |
 | `split` | Split large drawers | `nardo split` |
 | `migrate` | Schema migration utility | `nardo migrate` |
+| `reembed` | Re-embed all drawers with the current model, rebuilding HNSW indexes | `nardo reembed` |
 
 ### Mining from stdin
 
@@ -320,6 +325,11 @@ Location: `.nardo/config.json` in the repo root (optional — most settings have
     "family",
     "creative"
   ],
+  "embedding": {
+    "provider": "ollama",
+    "model": "nomic-embed-text",
+    "ollama_url": "http://localhost:11434"
+  },
   "hooks": {
     "silent_save": true,
     "desktop_toast": false
@@ -334,6 +344,9 @@ Location: `.nardo/config.json` in the repo root (optional — most settings have
 | `palace_path` | string | `repo-local .nardo/palace (requires git repo)` | Optional explicit override |
 | `collection_name` | string | `nardo_drawers` | Main collection name |
 | `topic_wings` | array | 7 defaults | Default wing categories |
+| `embedding.provider` | string | `ollama` | `ollama` or `xenova` |
+| `embedding.model` | string | `nomic-embed-text` | Model name for ollama |
+| `embedding.ollama_url` | string | `http://localhost:11434` | ollama server URL |
 | `hooks.silent_save` | bool | `true` | Save directly or call MCP |
 | `hooks.desktop_toast` | bool | `false` | Show desktop notifications |
 
