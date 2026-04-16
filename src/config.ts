@@ -1,5 +1,5 @@
 // Config loader
-import { readFileSync, mkdirSync } from 'fs'
+import { readFileSync, mkdirSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 
@@ -11,6 +11,7 @@ export interface NardoConfig {
     provider: 'xenova' | 'ollama'
     ollama_url: string
     model: string
+    // Dimension currently materialized in the on-disk HNSW indexes.
     dimension?: number
   }
   hooks: {
@@ -27,6 +28,7 @@ const DEFAULTS: NardoConfig = {
     provider: 'xenova',
     ollama_url: 'http://localhost:11434',
     model: 'nomic-embed-text',
+    dimension: 384,
   },
   hooks: {
     silent_save: true,
@@ -42,7 +44,11 @@ function resolvePalacePath(): string {
   )
 }
 
-function loadFileConfig(): Partial<NardoConfig> {
+export function getConfigPath(): string {
+  return join(homedir(), '.nardo', 'config.json')
+}
+
+function loadRawFileConfig(): Partial<NardoConfig> {
   const configPath = join(homedir(), '.nardo', 'config.json')
   try {
     const raw = readFileSync(configPath, 'utf-8')
@@ -53,7 +59,7 @@ function loadFileConfig(): Partial<NardoConfig> {
 }
 
 export function loadConfig(): NardoConfig {
-  const fileConfig = loadFileConfig()
+  const fileConfig = loadRawFileConfig()
   const palace_path = resolvePalacePath()
 
   const merged: NardoConfig = {
@@ -75,16 +81,28 @@ export function loadConfig(): NardoConfig {
   return merged
 }
 
+export function saveConfig(config: NardoConfig): void {
+  const configPath = getConfigPath()
+  mkdirSync(join(homedir(), '.nardo'), { recursive: true })
+  writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+}
+
 export function getDefaultEmbeddingDimension(provider: 'xenova' | 'ollama'): number {
   return provider === 'ollama' ? 768 : 384
 }
 
-export function getConfiguredEmbeddingDimension(
+export function getProviderEmbeddingDimension(
+  embedding: Partial<NardoConfig['embedding']> | undefined,
+): number {
+  return getDefaultEmbeddingDimension(embedding?.provider ?? DEFAULTS.embedding.provider)
+}
+
+export function getIndexedEmbeddingDimension(
   embedding: Partial<NardoConfig['embedding']> | undefined,
 ): number {
   if (typeof embedding?.dimension === 'number' && embedding.dimension > 0) {
     return embedding.dimension
   }
 
-  return getDefaultEmbeddingDimension(embedding?.provider ?? DEFAULTS.embedding.provider)
+  return getProviderEmbeddingDimension(embedding)
 }

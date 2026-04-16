@@ -3,7 +3,7 @@ import { Database } from 'bun:sqlite'
 import { HierarchicalNSW } from 'hnswlib-node'
 import { mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
-import { getConfiguredEmbeddingDimension, loadConfig } from '../config.js'
+import { getIndexedEmbeddingDimension, loadConfig } from '../config.js'
 
 // ─── Public interfaces ────────────────────────────────────────────────────────
 
@@ -784,7 +784,7 @@ export class PalaceClient {
 
   constructor(palace_path: string, embeddingDimension?: number) {
     this.palace_path = palace_path
-    this.embeddingDimension = embeddingDimension ?? getConfiguredEmbeddingDimension(loadConfig().embedding)
+    this.embeddingDimension = embeddingDimension ?? getIndexedEmbeddingDimension(loadConfig().embedding)
   }
 
   private ensureInit(): void {

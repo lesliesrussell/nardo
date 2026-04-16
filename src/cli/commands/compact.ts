@@ -16,7 +16,7 @@ import { statSync, renameSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { Database } from 'bun:sqlite'
 import { HierarchicalNSW } from 'hnswlib-node'
-import { getConfiguredEmbeddingDimension, loadConfig } from '../../config.js'
+import { getIndexedEmbeddingDimension, loadConfig } from '../../config.js'
 
 const HNSW_M = 16
 const HNSW_EF = 200
@@ -117,7 +117,7 @@ export function registerCompact(program: Command): void {
     .action(async (opts: { palace?: string; quiet?: boolean }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
-      const dimension = getConfiguredEmbeddingDimension(config.embedding)
+      const dimension = getIndexedEmbeddingDimension(config.embedding)
       const quiet = opts.quiet ?? false
 
       const dbPath = join(palace_path, 'palace.sqlite3')

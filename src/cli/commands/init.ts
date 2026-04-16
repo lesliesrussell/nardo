@@ -123,6 +123,7 @@ export function registerInit(program: Command): void {
             provider: 'xenova',
             ollama_url: 'http://localhost:11434',
             model: 'nomic-embed-text',
+            dimension: 384,
           },
         }
         writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf-8')

@@ -22,6 +22,7 @@ import { registerPalaceStats } from './commands/palace-stats.js'
 import { registerCompact } from './commands/compact.js'
 import { registerMineUrl } from './commands/mine-url.js'
 import { registerMineGit } from './commands/mine-git.js'
+import { registerReembed } from './commands/reembed.js'
 
 const program = new Command()
 
@@ -51,5 +52,6 @@ registerPalaceStats(program)
 registerCompact(program)
 registerMineUrl(program)
 registerMineGit(program)
+registerReembed(program)
 
 program.parse(process.argv)

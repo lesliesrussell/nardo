@@ -1,6 +1,6 @@
 // EmbeddingPipeline singleton — config-driven provider with Ollama + Xenova fallback
 import { pipeline, env } from '@xenova/transformers'
-import { getConfiguredEmbeddingDimension, loadConfig } from '../config.js'
+import { getProviderEmbeddingDimension, loadConfig } from '../config.js'
 import { OllamaEmbedder } from './ollama.js'
 
 const XENOVA_MODEL = 'Xenova/all-MiniLM-L6-v2'
@@ -102,7 +102,7 @@ export class EmbeddingPipeline implements Embedder {
   private constructor() {
     const config = loadConfig()
     this.preferredProvider = config.embedding.provider
-    this.targetDimension = getConfiguredEmbeddingDimension(config.embedding)
+    this.targetDimension = getProviderEmbeddingDimension(config.embedding)
 
     if (config.embedding.provider === 'ollama') {
       this.ollama = new OllamaEmbedder(config.embedding.ollama_url, config.embedding.model)
