@@ -205,3 +205,91 @@ export async function mineDirectory(
 
   return { files: fileCount, drawers: drawerCount }
 }
+
+export interface MineSingleResult {
+  drawers: number
+  /** true if file was skipped (unchanged mtime, unreadable extension, too large, or error) */
+  skipped: boolean
+  /** true if old drawers were replaced (re-mine of changed file) */
+  remined: boolean
+}
+
+/**
+ * Mine a single file into the palace.
+ * Used by the watch daemon to handle individual file create/change events.
+ * Respects the same mtime-based deduplication as mineDirectory — no-op if file is unchanged.
+ */
+export async function mineSingleFile(
+  filePath: string,
+  opts: MineOptions,
+): Promise<MineSingleResult> {
+  const ext = extname(filePath).toLowerCase()
+  if (!READABLE_EXTENSIONS.has(ext)) return { drawers: 0, skipped: true, remined: false }
+
+  let stat: ReturnType<typeof statSync>
+  try {
+    stat = statSync(filePath)
+    if (stat.size > MAX_FILE_SIZE) return { drawers: 0, skipped: true, remined: false }
+  } catch {
+    return { drawers: 0, skipped: true, remined: false }
+  }
+
+  const mtime = stat.mtimeMs
+  const agent = opts.agent ?? 'watch'
+
+  const client = new PalaceClient(opts.palace_path)
+
+  const { mined, mtime: storedMtime } = await fileAlreadyMined(client, filePath)
+  if (mined && storedMtime !== undefined && storedMtime >= mtime) {
+    return { drawers: 0, skipped: true, remined: false }
+  }
+
+  if (mined) {
+    await deleteDrawersBySource(client, filePath)
+    await deleteClosetsBySource(client, filePath)
+  }
+
+  let content: string
+  try {
+    content = readFileSync(filePath, 'utf-8')
+  } catch {
+    return { drawers: 0, skipped: true, remined: false }
+  }
+
+  const room = detectRoom(filePath, content, opts.rooms)
+  const chunks = chunkText(content)
+  if (chunks.length === 0) return { drawers: 0, skipped: false, remined: mined }
+
+  const embedder = getEmbeddingPipeline()
+  const texts = chunks.map(c => c.text)
+  const embeddings = await embedder.embed(texts)
+
+  const drawer_ids: string[] = []
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i]!
+    const embedding = embeddings[i]
+    if (!embedding) continue
+
+    const metadata = {
+      wing: opts.wing,
+      room,
+      source_file: filePath,
+      source_mtime: mtime,
+      chunk_index: chunk.index,
+      normalize_version: 2,
+      added_by: agent,
+      filed_at: new Date().toISOString(),
+      ingest_mode: 'project' as const,
+      importance: computeImportance(chunk.text),
+      chunk_size: chunk.text.length,
+    }
+
+    const drawer_id = await addDrawer(client, embedding, chunk.text, metadata, wal)
+    drawer_ids.push(drawer_id)
+  }
+
+  const closetLines = buildClosetLines(content, drawer_ids, opts.wing, room)
+  await addClosets(client, filePath, closetLines, opts.wing, room)
+
+  return { drawers: drawer_ids.length, skipped: false, remined: mined }
+}

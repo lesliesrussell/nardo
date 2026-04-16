@@ -14,6 +14,7 @@ import { registerSplit } from './commands/split.js'
 import { registerAddDrawer } from './commands/add-drawer.js'
 import { registerForget } from './commands/forget.js'
 import { registerDiary } from './commands/diary.js'
+import { registerWatch } from './commands/watch.js'
 
 const program = new Command()
 
@@ -35,5 +36,6 @@ registerSplit(program)
 registerAddDrawer(program)
 registerForget(program)
 registerDiary(program)
+registerWatch(program)
 
 program.parse(process.argv)

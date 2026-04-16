@@ -4,3 +4,4 @@
 *.db
 .beads-credential-key
 node_modules/
+.omc/
