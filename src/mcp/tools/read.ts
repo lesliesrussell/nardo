@@ -28,7 +28,10 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
       rooms,
       palace_path,
       protocol:
-        'nardo Memory Protocol: Use nardo_search to retrieve memories before answering questions about past context.',
+        'nardo Memory Protocol: (1) Call nardo_search to retrieve memories before answering questions about past context. ' +
+        '(2) Results are scoped by wing (topic) and room (subdirectory). Use nardo_list_rooms to discover available rooms, ' +
+        'then pass room= to nardo_search to get focused results. ' +
+        '(3) If search results look weak or off-topic, call nardo_suggest_room with your query to find the best room, then re-search with room= set.',
     }
 
     return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] }
@@ -99,7 +102,7 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
   // nardo_search
   server.tool(
     'nardo_search',
-    'Search palace drawers semantically',
+    'Semantic + keyword hybrid search. Use room= to focus results (call nardo_list_rooms to see available rooms). If results are weak, call nardo_suggest_room first.',
     {
       query: z.string().describe('Search query'),
       limit: z.number().optional().describe('Max results (default 5)'),
@@ -125,6 +128,16 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
         decay_halflife: input.decay_halflife,
         federated: input.federated,
       })
+
+      // Weak result hint: if best similarity is low, suggest room filtering
+      const bestSim = Math.max(0, ...response.results.map(r => r.similarity))
+      if (bestSim < 0.4 && !input.room) {
+        const hinted = {
+          ...response,
+          room_hint: 'Results may be weak. Try: (1) call nardo_suggest_room with your query to find the best room, then re-run nardo_search with room= set; (2) call nardo_list_rooms to browse available rooms.',
+        }
+        return { content: [{ type: 'text' as const, text: JSON.stringify(hinted, null, 2) }] }
+      }
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }] }
     },
