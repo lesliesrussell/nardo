@@ -16,7 +16,7 @@ Local-first memory system for AI agents. 100% verbatim recall, zero API dependen
 |-----------|-----------|---------|
 | **Runtime** | Bun | Native TypeScript, built-in test runner, `bun:sqlite` |
 | **Language** | TypeScript | Type safety, first-class MCP SDK support |
-| **Vector Store** | ChromaDB | HNSW cosine index with metadata filtering |
+| **Vector Store** | hnswlib-node | HNSW cosine index (custom SQLite integration) |
 | **Embeddings** | @xenova/transformers | Local ONNX runtime (Xenova/all-MiniLM-L6-v2) |
 | **Knowledge Graph** | bun:sqlite | Embedded temporal KG, zero ops |
 | **MCP Server** | @modelcontextprotocol/sdk | Claude-native memory interface |
@@ -72,13 +72,12 @@ On first run, the embedding model downloads to `~/.cache/huggingface/` (~150MB, 
 Index a codebase or text project into the palace:
 
 ```bash
- nardo mine ~/my_project --wing my_project --mode project
+nardo mine ~/my_project --wing my_project
 ```
 
 Options:
 - `--palace <path>`: Override default palace location (~/.nardo/palace)
 - `--wing <name>`: Category name (defaults to project name)
-- `--mode <mode>`: `project` (file mining) or `convos` (conversation mining)
 - `--limit <n>`: Mine only first N files
 - `--dry-run`: Preview without writing
 - `--no-gitignore`: Ignore .gitignore patterns
@@ -101,7 +100,7 @@ Options:
 Expose the palace as an MCP server for Claude Code:
 
 ```bash
- nardo mcp --palace ~/.nardo/palace
+nardo mcp
 ```
 
 Claude can then use tools like `nardo_search`, `nardo_add_drawer`, and `nardo_kg_query`.
@@ -110,16 +109,37 @@ Claude can then use tools like `nardo_search`, `nardo_add_drawer`, and `nardo_kg
 
 | Command | Purpose | Example |
 |---------|---------|---------|
-| `mine <path>` | Index files or conversations | `nardo mine ~/project --wing my_work` |
-| `search <query>` | Semantic search | `nardo search "authentication logic"` |
+| `mine <path>` | Index files, conversations, or stdin (-) | `nardo mine ~/project --wing mywork` |
+| `mine-beads` | Ingest beads issues into palace | `nardo mine-beads --watch` |
+| `mine-url <url>` | Fetch webpage and mine into palace | `nardo mine-url https://docs.example.com` |
+| `mine-git [repo]` | Mine git commit history | `nardo mine-git . --with-diffs` |
+| `search <query>` | Semantic + keyword hybrid search | `nardo search "authentication logic"` |
 | `status` | Show palace statistics | `nardo status` |
+| `palace-stats` | Detailed storage health report | `nardo palace-stats` |
+| `compact` | Rebuild HNSW, remove tombstones | `nardo compact` |
+| `export` | Export all drawers to JSONL | `nardo export > backup.jsonl` |
+| `import` | Import drawers from JSONL | `nardo import backup.jsonl` |
 | `init <path>` | Initialize a new palace | `nardo init ~/.nardo/custom` |
 | `wake-up` | Load memory layers (L0-L3) | `nardo wake-up` |
-| `mcp` | Start MCP server | `bun run mcp --palace ~/.nardo/palace` |
+| `mcp` | Start MCP server | `nardo mcp` |
 | `repair` | Interactive palace repair | `nardo repair` |
 | `dedup` | Remove near-duplicate drawers | `nardo dedup --threshold 0.15` |
-| `add-drawer` | Manual drawer insertion | `nardo add-drawer --wing my_wing --room my_room` |
+| `forget` | Delete drawers by filter | `nardo forget --source myfile.txt` |
+| `add-drawer` | Manual drawer insertion | `nardo add-drawer --wing w --room r` |
+| `diary` | Add timestamped diary entry | `nardo diary "Shipped v2"` |
+| `watch` | Watch directory for changes | `nardo watch ~/project` |
+| `split` | Split large drawers | `nardo split` |
 | `migrate` | Schema migration utility | `nardo migrate` |
+
+### Mining from stdin
+
+Pipe any text directly into the palace:
+
+```bash
+# Pipe any text directly into the palace
+echo "Meeting notes: decided to use HNSW" | nardo mine - --wing meetings
+cat report.txt | nardo mine - --wing research --room reports
+```
 
 ## MCP Tools Reference
 
@@ -131,7 +151,11 @@ The MCP server exposes these tools for Claude Code and other MCP clients:
 |------|-------------|
 | `nardo_status` | Show palace statistics (drawer count, wings, rooms) |
 | `nardo_list_wings` | List all wings in the palace |
-| `nardo_search` | Semantic search with optional wing/room filter |
+| `nardo_list_rooms` | List rooms, optionally filtered by wing |
+| `nardo_search` | Semantic + keyword hybrid search with MMR diversity control |
+| `nardo_summarize` | Prose summary with source citations from top passages |
+| `nardo_search_batch` | Parallel multi-query search with deduplication merge |
+| `nardo_suggest_room` | Suggest best room for a text snippet within a wing |
 | `nardo_get_taxonomy` | Retrieve wing/room hierarchy |
 
 ### Write Tools
@@ -185,20 +209,20 @@ WING (Category, e.g., "my_project", "personal_notes")
 
 ```
 ~/.nardo/
-├── palace/                         # Default palace root
-│   ├── chroma.sqlite3              # ChromaDB (drawers + closets)
-│   ├── index/                      # HNSW vector index
-│   └── knowledge_graph.sqlite3     # Temporal KG
-├── config.json                     # User configuration
-├── identity.txt                    # Layer 0 identity (optional)
-├── wal/
-│   └── write_log.jsonl             # Write-ahead log
-└── locks/                          # Cross-process file locks
+├── palace/
+│   ├── palace.sqlite3        # Drawers + closets + FTS5 index
+│   ├── drawers.hnsw          # HNSW vector index for drawers
+│   ├── closets.hnsw          # HNSW vector index for closets
+│   └── kg.db                 # Temporal knowledge graph
+├── config.json
+├── identity.txt
+└── wal/
+    └── write_log.jsonl
 ```
 
 ### Closets and Knowledge Graph
 
-**Closets**: Compressed topic/entity indices pointing to drawers. Live in a separate ChromaDB collection for fast ranking signals.
+**Closets**: Compressed topic/entity indices pointing to drawers. Live in a separate HNSW index for fast ranking signals.
 
 **Knowledge Graph**: SQLite schema with three tables:
 - **entities**: Canonical names (people, projects, concepts)
@@ -231,6 +255,20 @@ nardo wake-up
 Options:
 - `--wing <name>`: Filter L1 context to specific wing
 - `--palace <path>`: Override palace location
+
+### Hybrid Search Scoring
+
+The search system combines multiple ranking signals:
+- **Vector similarity** (55%): Cosine distance from embeddings
+- **Keyword ranking** (35%): BM25 relevance
+- **Importance decay** (10%): Recent content scores higher
+
+**MMR Reranking**: Control diversity with `mmr_lambda` parameter (0.0–1.0, default 0.7):
+- 1.0 = pure relevance
+- 0.7 = balanced (default)
+- 0.0 = pure diversity
+
+**Importance decay**: Content scores decay over time. Configure half-life in days (default 90). Set to 0 to disable.
 
 ## Hook Setup
 
@@ -288,7 +326,7 @@ Location: `~/.nardo/config.json`
 
 | Property | Type | Default | Notes |
 |----------|------|---------|-------|
-| `palace_path` | string | `~/.nardo/palace` | ChromaDB storage location |
+| `palace_path` | string | `~/.nardo/palace` | Palace storage location |
 | `collection_name` | string | `nardo_drawers` | Main collection name |
 | `topic_wings` | array | 7 defaults | Default wing categories |
 | `hooks.silent_save` | bool | `true` | Save directly or call MCP |
@@ -301,6 +339,48 @@ Override palace path via environment:
 export NARDO_PALACE_PATH=/custom/path
 nardo status
 ```
+
+## Deduplication
+
+Remove near-duplicate drawers with:
+
+```bash
+nardo dedup --threshold 0.15
+```
+
+Algorithm:
+1. Group drawers by source_file
+2. For groups with 5+ drawers, score similarity (cosine distance < threshold)
+3. Keep longest drawer from each group
+4. Delete marked duplicates
+
+Threshold default: 0.15 (configurable, lower = stricter dedup).
+
+## Export & Import
+
+Back up or migrate the palace:
+
+```bash
+nardo export > backup.jsonl           # Export all drawers
+nardo export --wing git > git.jsonl   # Export one wing
+nardo import backup.jsonl             # Restore into current palace
+```
+
+Format: JSONL with base64-encoded Float32Array embeddings. SHA-256 deduplication on import prevents duplicates.
+
+## Repair
+
+Recover from corruption or missing metadata:
+
+```bash
+nardo repair
+```
+
+Interactive mode prompts for:
+- Verify drawer integrity
+- Rebuild indices
+- Clean up invalid pointers
+- Restore from backup
 
 ## Development
 
@@ -348,6 +428,7 @@ src/
 │   └── room-detector.ts    # Room/topic detection
 ├── search/                 # Search engine
 │   ├── hybrid.ts           # BM25 + vector hybrid search
+│   ├── mmr.ts              # MMR reranking
 │   ├── bm25.ts             # Keyword ranking
 │   ├── dedup.ts            # Deduplication
 │   └── sanitizer.ts        # Query cleaning
@@ -371,41 +452,10 @@ src/
 └── index.ts                # Main entry
 ```
 
-## Deduplication
-
-Remove near-duplicate drawers with:
-
-```bash
-nardo dedup --threshold 0.15
-```
-
-Algorithm:
-1. Group drawers by source_file
-2. For groups with 5+ drawers, score similarity (cosine distance < threshold)
-3. Keep longest drawer from each group
-4. Delete marked duplicates
-
-Threshold default: 0.15 (configurable, lower = stricter dedup).
-
-## Repair
-
-Recover from corruption or missing metadata:
-
-```bash
-nardo repair
-```
-
-Interactive mode prompts for:
-- Verify drawer integrity
-- Rebuild indices
-- Clean up invalid pointers
-- Restore from backup
-
 ## Limitations and Future Work
 
 - **Single-region**: Palace is single-machine. Multi-region sync planned.
 - **Entity resolution**: Basic duplicate detection; full reconciliation pending.
-- **Temporal reasoning**: KG stores time ranges but query system doesn't yet use them.
 - **Access control**: No built-in RLS; privacy enforced via file permissions.
 
 ## License
