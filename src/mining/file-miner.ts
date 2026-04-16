@@ -52,16 +52,34 @@ async function populateKnowledgeGraph(
 
   const kg = new KnowledgeGraph(getKgPath(palace_path))
   try {
+    // Collect unique entity pairs across all chunks before inserting triples
+    const entityMap = new Map<string, string>()  // name → canonical id
+    const pairs = new Set<string>()
+
     for (const chunk of chunks) {
       const entities = detectEntities(chunk.text)
       if (entities.length === 0) continue
 
-      const ids = entities.map(entity => kg.upsertEntity(entity.name, { type: entity.type }))
+      const ids = entities.map(entity => {
+        const id = kg.upsertEntity(entity.name, { type: entity.type })
+        entityMap.set(entity.name, id)
+        return id
+      })
+
       for (let i = 0; i < ids.length; i++) {
         for (let j = i + 1; j < ids.length; j++) {
-          kg.addTriple(ids[i]!, 'co-occurs-with', ids[j]!, { source_file })
+          // Normalize pair order so (a,b) and (b,a) don't both get inserted
+          const a = ids[i]!
+          const b = ids[j]!
+          const key = a < b ? `${a}::${b}` : `${b}::${a}`
+          pairs.add(key)
         }
       }
+    }
+
+    for (const key of pairs) {
+      const [a, b] = key.split('::') as [string, string]
+      kg.addTriple(a, 'co-occurs-with', b, { source_file })
     }
   } finally {
     kg.close()

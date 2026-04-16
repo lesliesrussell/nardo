@@ -18,6 +18,15 @@ const STOPWORDS = new Set([
   'Record', 'Partial', 'Required', 'Readonly', 'Pick', 'Omit',
   // Common prose words that pass the capitalization filter
   'Note', 'See', 'Next', 'Last', 'New', 'Old', 'All', 'Any',
+  // Generic verbs/nouns that appear capitalized in code contexts
+  'Build', 'Buffer', 'Chunk', 'Command', 'Commit', 'Database',
+  'Debounce', 'Delete', 'Fetch', 'Filed', 'Filter', 'Line', 'List',
+  'Lone', 'Name', 'Priority', 'Relationship', 'Remote', 'Remove',
+  'Scan', 'Step', 'Use', 'Validate', 'Lookup', 'Load', 'Save',
+  'Open', 'Close', 'Read', 'Write', 'Parse', 'File', 'Path',
+  'Index', 'Query', 'Result', 'Value', 'Item', 'Data', 'Options',
+  'Config', 'Context', 'Request', 'Response', 'Event', 'Node',
+  'Text', 'Block', 'Token', 'Hash', 'Scope', 'Store', 'State',
 ])
 
 const PERSON_VERBS = new Set([
@@ -36,7 +45,7 @@ const PRONOUN_RE = /\b(she|he|they)\b/gi
 
 export interface DetectedEntity {
   name: string
-  type: 'person' | 'project'
+  type: 'person' | 'project' | 'unknown'
   confidence: number
   occurrences: number
 }
@@ -120,7 +129,10 @@ export function detectEntities(content: string): DetectedEntity[] {
     }
 
     const occurrences = counts.get(name) ?? 0
-    const type: 'person' | 'project' = personScore >= projectScore ? 'person' : 'project'
+    const hasSignal = personScore > 0 || projectScore > 0
+    const type: 'person' | 'project' | 'unknown' = !hasSignal
+      ? 'unknown'
+      : personScore >= projectScore ? 'person' : 'project'
     const gap = Math.abs(personScore - projectScore)
     // Confidence: base 0.5, scale up by gap, cap at 1.0
     const confidence = Math.min(1.0, 0.5 + gap * 0.1)
@@ -143,7 +155,7 @@ export async function detectAndClassify(
     if (existing) {
       entity.type = existing.type === 'concept' || existing.type === 'place' || existing.type === 'unknown'
         ? entity.type
-        : existing.type as 'person' | 'project'
+        : existing.type as 'person' | 'project' | 'unknown'
       entity.confidence = existing.confidence
     } else if (useWikipedia) {
       const wiki = await lookupWikipedia(entity.name)
