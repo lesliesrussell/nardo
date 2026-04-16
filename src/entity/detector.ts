@@ -2,12 +2,22 @@ import type { EntityRegistry } from './registry.ts'
 import { lookupWikipedia } from './wikipedia.ts'
 
 const STOPWORDS = new Set([
+  // English
   'The', 'This', 'That', 'When', 'Where', 'What', 'Which', 'With',
   'From', 'Into', 'Over', 'Under', 'After', 'Before', 'Been', 'Have',
   'Will', 'Should', 'Could', 'Would', 'Their', 'There', 'These', 'Those',
   'Then', 'Than', 'Also', 'Each', 'Some', 'Many', 'Most', 'More',
   'Other', 'Such', 'Just', 'Very', 'Well', 'Even', 'Only', 'Both',
   'Few', 'Own', 'Same',
+  // JS/TS builtins and common code tokens
+  'Array', 'Map', 'Set', 'Error', 'Math', 'Date', 'JSON', 'Object',
+  'String', 'Number', 'Boolean', 'Promise', 'Symbol', 'Proxy', 'Reflect',
+  'Function', 'Null', 'Undefined', 'True', 'False', 'Void', 'Never',
+  'Type', 'Interface', 'Class', 'Enum', 'Const', 'Export', 'Import',
+  'Default', 'Async', 'Await', 'Return', 'Throw', 'Catch', 'Finally',
+  'Record', 'Partial', 'Required', 'Readonly', 'Pick', 'Omit',
+  // Common prose words that pass the capitalization filter
+  'Note', 'See', 'Next', 'Last', 'New', 'Old', 'All', 'Any',
 ])
 
 const PERSON_VERBS = new Set([

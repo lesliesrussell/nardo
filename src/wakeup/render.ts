@@ -7,7 +7,7 @@ export interface WakeupPayload {
 
 export function renderWakeupText(payload: WakeupPayload, quiet = false): string {
   const lines: string[] = []
-  const l0 = payload.l0?.trim() || '(no identity.txt found at ~/.nardo/identity.txt)'
+  const l0 = payload.l0?.trim() || '(no identity.txt found at .nardo/identity.txt in repo root)'
 
   if (quiet) {
     lines.push(l0)
