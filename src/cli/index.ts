@@ -12,6 +12,7 @@ import { registerDedup } from './commands/dedup.js'
 import { registerMigrate } from './commands/migrate.js'
 import { registerSplit } from './commands/split.js'
 import { registerAddDrawer } from './commands/add-drawer.js'
+import { registerForget } from './commands/forget.js'
 
 const program = new Command()
 
@@ -31,5 +32,6 @@ registerDedup(program)
 registerMigrate(program)
 registerSplit(program)
 registerAddDrawer(program)
+registerForget(program)
 
 program.parse(process.argv)

@@ -112,3 +112,70 @@ export async function getAllDrawerMetadata(
     (m) => m as unknown as DrawerMetadata,
   )
 }
+
+export interface ForgetOptions {
+  source_file?: string
+  wing?: string
+  room?: string
+  /** ISO date string — delete drawers filed before this date */
+  before?: string
+  /** Specific drawer ID to delete */
+  id?: string
+  dry_run?: boolean
+}
+
+/**
+ * Delete drawers matching the given criteria.
+ * Returns the number of drawers deleted (or that would be deleted in dry_run mode).
+ */
+export async function forgetDrawers(
+  client: PalaceClient,
+  opts: ForgetOptions,
+  wal: typeof import('../wal.ts'),
+): Promise<number> {
+  const collection = await client.getDrawersCollection()
+
+  // Single-ID fast path
+  if (opts.id) {
+    if (!opts.dry_run) {
+      await collection.delete({ ids: [opts.id] })
+      await wal.logWrite('forget_drawer', { drawer_id: opts.id }, { drawer_id: opts.id })
+    }
+    return 1
+  }
+
+  // Build where clause for the collection query
+  let where: Record<string, unknown> | undefined
+
+  if (opts.source_file) {
+    where = { source_file: { '$eq': opts.source_file } }
+  } else if (opts.wing && opts.room) {
+    where = { '$and': [{ wing: { '$eq': opts.wing } }, { room: { '$eq': opts.room } }] }
+  } else if (opts.wing) {
+    where = { wing: { '$eq': opts.wing } }
+  }
+
+  // Fetch candidate IDs (with or without where filter)
+  const results = await collection.get({
+    ...(where ? { where } : {}),
+    include: ['metadatas'],
+  })
+
+  let ids = results.ids
+
+  // Apply --before date filter in JS (ISO string comparison)
+  if (opts.before) {
+    ids = ids.filter((_id, i) => {
+      const meta = results.metadatas[i]
+      const filed = meta?.['filed_at'] as string | undefined
+      return filed !== undefined && filed < opts.before!
+    })
+  }
+
+  if (ids.length === 0) return 0
+  if (opts.dry_run) return ids.length
+
+  await collection.delete({ ids })
+  await wal.logWrite('forget_drawers', { count: ids.length, ...opts }, { count: ids.length })
+  return ids.length
+}
