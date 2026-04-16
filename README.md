@@ -105,6 +105,9 @@ nardo mcp
 
 Claude can then use tools like `nardo_search`, `nardo_add_drawer`, and `nardo_kg_query`.
 
+Inside a git repo, `nardo mcp` serves the repo-local palace at `.nardo/palace` by default.
+Use `--palace /path/to/global-palace` only when you explicitly want to point MCP somewhere else.
+
 ## CLI Reference
 
 | Command | Purpose | Example |
@@ -119,7 +122,7 @@ Claude can then use tools like `nardo_search`, `nardo_add_drawer`, and `nardo_kg
 | `compact` | Rebuild HNSW, remove tombstones | `nardo compact` |
 | `export` | Export all drawers to JSONL | `nardo export > backup.jsonl` |
 | `import` | Import drawers from JSONL | `nardo import backup.jsonl` |
-| `init <path>` | Initialize a new palace | `nardo init ~/.nardo/custom` |
+| `init <path>` | Initialize project metadata and default config | `nardo init .` |
 | `wake-up` | Load memory layers (L0-L3) | `nardo wake-up` |
 | `mcp` | Start MCP server | `nardo mcp` |
 | `repair` | Interactive palace repair | `nardo repair` |
@@ -208,16 +211,22 @@ WING (Category, e.g., "my_project", "personal_notes")
 ### Storage
 
 ```
-~/.nardo/
+.nardo/
 ├── palace/
 │   ├── palace.sqlite3        # Drawers + closets + FTS5 index
 │   ├── drawers.hnsw          # HNSW vector index for drawers
 │   ├── closets.hnsw          # HNSW vector index for closets
 │   └── kg.db                 # Temporal knowledge graph
-├── config.json
-├── identity.txt
 └── wal/
     └── write_log.jsonl
+```
+
+Global files still live under `~/.nardo/` for user-scoped settings:
+
+```
+~/.nardo/
+├── config.json               # Optional explicit overrides
+└── identity.txt              # Layer-0 identity text
 ```
 
 ### Closets and Knowledge Graph
@@ -344,6 +353,9 @@ export NARDO_PALACE_PATH=/custom/path
 nardo status
 ```
 
+This is the main escape hatch when you want a shared or global palace.
+Without an override, `nardo` now prefers `.nardo/palace` in the current git repo.
+
 ## Deduplication
 
 Remove near-duplicate drawers with:
@@ -368,6 +380,7 @@ Back up or migrate the palace:
 nardo export > backup.jsonl           # Export all drawers
 nardo export --wing git > git.jsonl   # Export one wing
 nardo import backup.jsonl             # Restore into current palace
+nardo import backup.jsonl --palace /path/to/other/palace  # Restore elsewhere
 ```
 
 Format: JSONL with base64-encoded Float32Array embeddings. SHA-256 deduplication on import prevents duplicates.
