@@ -112,8 +112,9 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
       mmr_lambda: z.number().min(0).max(1).optional().describe('MMR diversity trade-off: 1.0=pure relevance, 0.0=pure diversity (default 0.7)'),
       decay_halflife: z.number().min(0).optional().describe('Importance decay half-life in days (default 90). Set 0 to disable.'),
       federated: z.boolean().optional().describe('Search all wings regardless of wing filter. Results tagged with origin wing (default false).'),
+      mode: z.enum(['full', 'pointer']).optional().describe('Response mode: "pointer" returns metadata only (no text body), "full" returns complete results (default "full")'),
     },
-    async (input: { query: string; limit?: number; wing?: string; room?: string; max_distance?: number; mmr_lambda?: number; decay_halflife?: number; federated?: boolean }) => {
+    async (input: { query: string; limit?: number; wing?: string; room?: string; max_distance?: number; mmr_lambda?: number; decay_halflife?: number; federated?: boolean; mode?: 'full' | 'pointer' }) => {
       const client = new PalaceClient(palace_path)
       const embedder = getEmbeddingPipeline()
       const searcher = new HybridSearcher(client, embedder)
@@ -131,15 +132,27 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
 
       // Weak result hint: if best similarity is low, suggest room filtering
       const bestSim = Math.max(0, ...response.results.map(r => r.similarity))
-      if (bestSim < 0.52 && !input.room) {
-        const hinted = {
-          ...response,
-          room_hint: 'Results may be weak. Try: (1) call nardo_suggest_room with your query to find the best room, then re-run nardo_search with room= set; (2) call nardo_list_rooms to browse available rooms.',
-        }
-        return { content: [{ type: 'text' as const, text: JSON.stringify(hinted, null, 2) }] }
+      const isWeak = bestSim < 0.52 && !input.room
+
+      const results = input.mode === 'pointer'
+        ? response.results.map(r => ({
+            id: r.drawer_index,
+            wing: r.wing,
+            room: r.room,
+            source_file: r.source_file,
+            similarity: r.similarity,
+            importance: r.importance,
+            filed_at: r.filed_at,
+          }))
+        : response.results
+
+      const payload = { ...response, results }
+
+      if (isWeak) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ ...payload, room_hint: 'Results may be weak. Try: (1) call nardo_suggest_room with your query to find the best room, then re-run nardo_search with room= set; (2) call nardo_list_rooms to browse available rooms.' }, null, 2) }] }
       }
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }] }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }] }
     },
   )
 
