@@ -53,6 +53,8 @@ export interface Collection {
   count(): Promise<number>
   /** BM25 scores via SQLite FTS5 for a candidate set of drawer IDs. Returns normalized [0,1] map. */
   fts5Score(ids: string[], query: string): Promise<Map<string, number>>
+  /** Retrieve stored embedding vectors for a set of drawer IDs. Used by MMR reranking. */
+  getEmbeddings(ids: string[]): Promise<Map<string, number[]>>
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -503,6 +505,27 @@ class DrawersCollection implements Collection {
     }
     return result
   }
+
+  async getEmbeddings(ids: string[]): Promise<Map<string, number[]>> {
+    if (ids.length === 0) return new Map()
+
+    const ph = ids.map(() => '?').join(', ')
+    const rows = this.db.query<{ id: string; label: number }, SQLBindings>(
+      `SELECT id, label FROM drawers WHERE id IN (${ph})`,
+    ).all(...ids)
+
+    const result = new Map<string, number[]>()
+    for (const row of rows) {
+      if (row.label == null) continue
+      try {
+        const vec = this.index.getPoint(row.label)
+        if (vec) result.set(row.id, Array.from(vec))
+      } catch {
+        // label may have been marked deleted — skip
+      }
+    }
+    return result
+  }
 }
 
 // ─── ClosetsCollection implementation ────────────────────────────────────────
@@ -739,6 +762,11 @@ class ClosetsCollection implements Collection {
 
   // Closets are not full-text indexed — BM25 scoring not applicable
   async fts5Score(_ids: string[], _query: string): Promise<Map<string, number>> {
+    return new Map()
+  }
+
+  // Closets don't support per-chunk embedding retrieval
+  async getEmbeddings(_ids: string[]): Promise<Map<string, number[]>> {
     return new Map()
   }
 }

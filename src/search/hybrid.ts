@@ -2,6 +2,7 @@ import { PalaceClient } from '../palace/client.js'
 import type { Collection } from '../palace/client.js'
 import { EmbeddingPipeline } from '../embeddings/pipeline.js'
 import { sanitizeQuery } from './sanitizer.js'
+import { mmrRerank } from './mmr.js'
 
 export interface SearchOptions {
   query: string
@@ -9,6 +10,8 @@ export interface SearchOptions {
   wing?: string
   room?: string
   max_distance?: number
+  /** MMR diversity trade-off: 1.0 = pure relevance, 0.0 = pure diversity (default: 0.7) */
+  mmr_lambda?: number
 }
 
 export interface SearchResult {
@@ -123,6 +126,7 @@ export class HybridSearcher {
     // BM25 scores via SQLite FTS5 — persisted index, unicode-aware, phrase-capable
     const normBm25Scores = await (drawersCol as Collection).fts5Score(drawerIds, clean_query)
 
+    const resultToDrawerId = new Map<SearchResult, string>()
     const scored: Array<{ result: SearchResult; final_score: number }> = []
 
     for (let i = 0; i < drawerIds.length; i++) {
@@ -172,12 +176,34 @@ export class HybridSearcher {
         importance: meta.importance as number | undefined,
       }
 
+      resultToDrawerId.set(result, id!)
       scored.push({ result, final_score })
     }
 
-    // Step 8: Sort by final_score desc, return top n_results
+    // Step 8: Sort by final_score desc
     scored.sort((a, b) => b.final_score - a.final_score)
-    const results = scored.slice(0, n_results).map(s => s.result)
+
+    // Build sorted candidates + reverse map for MMR
+    const resultById = new Map<string, SearchResult>()
+    for (const [result, drawerId] of resultToDrawerId) {
+      resultById.set(drawerId, result)
+    }
+    const sortedCandidates = scored.map(s => ({
+      id: resultToDrawerId.get(s.result)!,
+      score: s.final_score,
+    }))
+
+    // Step 9: MMR reranking for diversity (skip if lambda≥1 or only 1 result)
+    const lambda = opts.mmr_lambda ?? 0.7
+    let results: SearchResult[]
+
+    if (lambda < 1.0 && sortedCandidates.length > 1) {
+      const embeddings = await (drawersCol as Collection).getEmbeddings(drawerIds)
+      const selected = mmrRerank(sortedCandidates, embeddings, n_results, lambda)
+      results = selected.map(id => resultById.get(id)).filter((r): r is SearchResult => r != null)
+    } else {
+      results = scored.slice(0, n_results).map(s => s.result)
+    }
 
     return {
       query: clean_query,

@@ -104,8 +104,9 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
       wing: z.string().optional().describe('Filter to this wing'),
       room: z.string().optional().describe('Filter to this room'),
       max_distance: z.number().optional().describe('Max cosine distance threshold'),
+      mmr_lambda: z.number().min(0).max(1).optional().describe('MMR diversity trade-off: 1.0=pure relevance, 0.0=pure diversity (default 0.7)'),
     },
-    async (input: { query: string; limit?: number; wing?: string; room?: string; max_distance?: number }) => {
+    async (input: { query: string; limit?: number; wing?: string; room?: string; max_distance?: number; mmr_lambda?: number }) => {
       const client = new PalaceClient(palace_path)
       const embedder = getEmbeddingPipeline()
       const searcher = new HybridSearcher(client, embedder)
@@ -116,6 +117,7 @@ export function registerReadTools(server: McpServer, palace_path: string): void 
         wing: input.wing,
         room: input.room,
         max_distance: input.max_distance,
+        mmr_lambda: input.mmr_lambda,
       })
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }] }
