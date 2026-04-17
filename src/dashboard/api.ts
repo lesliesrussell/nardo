@@ -176,7 +176,7 @@ export async function handleKgGraph(palace_path: string, wing?: string): Promise
   }
 }
 
-export async function handleRecentDrawers(palace_path: string, limit = 20): Promise<unknown> {
+export async function handleRecentDrawers(palace_path: string, limit = 20, wing?: string): Promise<unknown> {
   try {
     const config = loadConfig()
     const db = await openPalaceDB(palace_path, config.palace.backend)
@@ -184,9 +184,10 @@ export async function handleRecentDrawers(palace_path: string, limit = 20): Prom
       id: string; document: string; wing: string; room: string
       filed_at: string; source_file: string; importance: number
     }>(
-      `SELECT id, document, wing, room, filed_at, source_file, importance
-       FROM drawers ORDER BY filed_at DESC LIMIT ?`,
-      [limit],
+      wing
+        ? `SELECT id, document, wing, room, filed_at, source_file, importance FROM drawers WHERE wing = ? ORDER BY filed_at DESC LIMIT ?`
+        : `SELECT id, document, wing, room, filed_at, source_file, importance FROM drawers ORDER BY filed_at DESC LIMIT ?`,
+      wing ? [wing, limit] : [limit],
     )
     await db.close()
     return {

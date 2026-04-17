@@ -152,17 +152,29 @@
 
   .search-empty { color: var(--dim); font-size: 13px; padding: 24px 0; text-align: center; }
 
-  /* Graph */
-  #graph-container { width: 100%; height: 560px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; position: relative; }
-  #graph-svg { width: 100%; height: 100%; cursor: grab; }
-  #graph-svg:active { cursor: grabbing; }
-  .graph-node { cursor: pointer; }
-  .graph-node circle { fill: var(--card); stroke: var(--cyan); stroke-width: 1.5; }
-  .graph-node text { fill: var(--text); font-size: 10px; font-family: inherit; pointer-events: none; }
-  .graph-edge line { stroke: var(--border); stroke-width: 1; }
-  .graph-edge text { fill: var(--dim); font-size: 9px; font-family: inherit; }
-  .graph-edge.inactive line { stroke: #2a2a2a; stroke-dasharray: 4 2; }
-  #graph-hint { position: absolute; bottom: 10px; right: 12px; color: var(--dim); font-size: 10px; pointer-events: none; }
+  /* Graph table view */
+  #kg-panels { display: flex; gap: 12px; height: 560px; }
+  #kg-entity-panel { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  #kg-entity-search { width: 100%; box-sizing: border-box; background: var(--bg); border: none; border-bottom: 1px solid var(--border); color: var(--text); font-family: inherit; font-size: 12px; padding: 8px 10px; outline: none; }
+  #kg-entity-search::placeholder { color: var(--dim); }
+  #kg-entity-list { flex: 1; overflow-y: auto; }
+  .kg-entity-row { padding: 7px 10px; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .kg-entity-row:hover { background: var(--border); }
+  .kg-entity-row.active { background: rgba(121,192,255,0.12); color: var(--cyan); }
+  .kg-entity-type { font-size: 9px; color: var(--dim); background: var(--border); border-radius: 3px; padding: 1px 4px; flex-shrink: 0; }
+  .kg-entity-label { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #kg-rel-panel { flex: 1; display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  #kg-rel-header { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--cyan); flex-shrink: 0; }
+  #kg-rel-body { flex: 1; overflow-y: auto; padding: 10px 14px; }
+  .kg-rel-section { margin-bottom: 16px; }
+  .kg-rel-section-title { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+  .kg-rel-table { width: 100%; border-collapse: collapse; }
+  .kg-rel-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .kg-rel-table td:first-child { color: var(--dim); width: 40%; }
+  .kg-rel-table td.kg-target { color: var(--cyan); cursor: pointer; }
+  .kg-rel-table td.kg-target:hover { text-decoration: underline; }
+  .kg-conf { font-size: 10px; color: var(--dim); }
+  #kg-empty { color: var(--dim); font-size: 12px; padding: 20px 0; }
 
   /* Timeline */
   .timeline-group { margin-bottom: 20px; }
@@ -235,9 +247,15 @@
       </div>
       <div id="tab-graph" class="tab-content">
         <div class="section-title">Knowledge graph</div>
-        <div id="graph-container">
-          <svg id="graph-svg"></svg>
-          <div id="graph-hint">scroll to zoom · drag to pan · drag nodes</div>
+        <div id="kg-panels">
+          <div id="kg-entity-panel">
+            <input id="kg-entity-search" type="text" placeholder="filter entities…">
+            <div id="kg-entity-list"><div class="loading">loading…</div></div>
+          </div>
+          <div id="kg-rel-panel">
+            <div id="kg-rel-header">select an entity to see relationships</div>
+            <div id="kg-rel-body"><div id="kg-empty">←  pick an entity from the list</div></div>
+          </div>
         </div>
       </div>
       <div id="tab-timeline" class="tab-content">
@@ -338,6 +356,8 @@ function setActiveWing(wing) {
   if (activeTab === 'overview') {
     loadRecentDrawers()
     renderWingChart()
+  } else if (activeTab === 'timeline') {
+    loadTimeline()
   } else if (activeTab === 'search') {
     document.getElementById('search-wing').value = activeWing || ''
     runSearch()
@@ -361,7 +381,9 @@ function renderWingChart() {
 async function loadRecentDrawers() {
   const el = document.getElementById('recent-list')
   el.innerHTML = '<div class="loading">loading…</div>'
-  const data = await api('/api/drawers/recent?limit=20')
+  let url = '/api/drawers/recent?limit=20'
+  if (activeWing) url += '&wing=' + encodeURIComponent(activeWing)
+  const data = await api(url)
   const drawers = data.drawers ?? []
   if (!drawers.length) { el.innerHTML = '<div class="search-empty">no drawers found</div>'; return }
   el.innerHTML = drawers.map(d => drawerCard(d)).join('')
@@ -451,135 +473,118 @@ document.getElementById('search-room').addEventListener('change', runSearch)
 document.getElementById('search-limit').addEventListener('change', runSearch)
 
 // ── graph ──────────────────────────────────────────────────────────────────
+let kgNodes = [], kgEdges = [], kgSelected = null
+
 async function loadGraph() {
   if (graphLoaded) return
   graphLoaded = true
 
   const data = await api('/api/kg/graph')
-  const nodes = data.nodes ?? []
-  const edges = data.edges ?? []
+  kgNodes = data.nodes ?? []
+  kgEdges = data.edges ?? []
 
-  const svg = document.getElementById('graph-svg')
-  if (!nodes.length) {
-    svg.innerHTML = '<text x="50%" y="50%" text-anchor="middle" fill="#8b949e" font-size="13" font-family="monospace">no knowledge graph data</text>'
-    return
-  }
+  renderEntityList(kgNodes)
 
-  renderForceGraph(svg, nodes, edges)
+  document.getElementById('kg-entity-search').addEventListener('input', e => {
+    const q = e.target.value.toLowerCase()
+    renderEntityList(q ? kgNodes.filter(n => n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q)) : kgNodes)
+  })
 }
 
-function renderForceGraph(svg, nodes, edges) {
-  const W = svg.clientWidth || 800
-  const H = svg.clientHeight || 560
-
-  // Simple force simulation
-  const nodeMap = new Map(nodes.map(n => [n.id, { ...n, x: W/2 + (Math.random()-0.5)*200, y: H/2 + (Math.random()-0.5)*200, vx: 0, vy: 0 }]))
-
-  const edgeData = edges.map(e => ({
-    ...e,
-    source: nodeMap.get(e.source),
-    target: nodeMap.get(e.target),
-  })).filter(e => e.source && e.target)
-
-  function tick() {
-    const k = 0.02
-    const repulse = 1200
-
-    // Repulsion
-    const ns = [...nodeMap.values()]
-    for (let i = 0; i < ns.length; i++) {
-      for (let j = i + 1; j < ns.length; j++) {
-        const a = ns[i], b = ns[j]
-        const dx = b.x - a.x, dy = b.y - a.y
-        const dist = Math.sqrt(dx*dx + dy*dy) || 1
-        const f = repulse / (dist * dist)
-        a.vx -= f * dx / dist; a.vy -= f * dy / dist
-        b.vx += f * dx / dist; b.vy += f * dy / dist
-      }
-    }
-
-    // Attraction along edges
-    for (const e of edgeData) {
-      const dx = e.target.x - e.source.x, dy = e.target.y - e.source.y
-      const dist = Math.sqrt(dx*dx + dy*dy) || 1
-      const f = (dist - 80) * 0.03
-      e.source.vx += f * dx / dist; e.source.vy += f * dy / dist
-      e.target.vx -= f * dx / dist; e.target.vy -= f * dy / dist
-    }
-
-    // Center gravity
-    for (const n of ns) {
-      n.vx += (W/2 - n.x) * 0.002
-      n.vy += (H/2 - n.y) * 0.002
-    }
-
-    // Integrate
-    for (const n of ns) {
-      n.vx *= 0.85; n.vy *= 0.85
-      n.x += n.vx; n.y += n.vy
-    }
+function renderEntityList(nodes) {
+  const list = document.getElementById('kg-entity-list')
+  if (!nodes.length) {
+    list.innerHTML = '<div style="padding:12px;color:var(--dim);font-size:12px;">no entities</div>'
+    return
   }
-
-  // Run simulation steps
-  for (let i = 0; i < 200; i++) tick()
-
-  // Build SVG
-  const typeColor = { person: '#79c0ff', project: '#56d364', concept: '#e3b341', place: '#ff7b72', unknown: '#8b949e' }
-
-  let edgeSvg = ''
-  for (const e of edgeData) {
-    const mx = (e.source.x + e.target.x) / 2
-    const my = (e.source.y + e.target.y) / 2
-    edgeSvg += `<g class="graph-edge${e.current ? '' : ' inactive'}">
-      <line x1="${e.source.x.toFixed(1)}" y1="${e.source.y.toFixed(1)}" x2="${e.target.x.toFixed(1)}" y2="${e.target.y.toFixed(1)}"/>
-      <text x="${mx.toFixed(1)}" y="${my.toFixed(1)}" text-anchor="middle">${esc(e.label)}</text>
-    </g>`
-  }
-
-  let nodeSvg = ''
-  for (const n of nodeMap.values()) {
-    const col = typeColor[n.type] || '#8b949e'
-    nodeSvg += `<g class="graph-node" data-id="${esc(n.id)}">
-      <circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="20" stroke="${col}"/>
-      <text x="${n.x.toFixed(1)}" y="${(n.y + 32).toFixed(1)}" text-anchor="middle" fill="${col}">${esc(n.label)}</text>
-    </g>`
-  }
-
-  svg.innerHTML = `<g id="graph-root">${edgeSvg}${nodeSvg}</g>`
-
-  // Pan + zoom
-  let scale = 1, tx = 0, ty = 0
-  let dragging = false, lastX = 0, lastY = 0
-
-  function applyTransform() {
-    document.getElementById('graph-root').setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`)
-  }
-
-  svg.addEventListener('wheel', e => {
-    e.preventDefault()
-    const factor = e.deltaY < 0 ? 1.1 : 0.9
-    scale = Math.max(0.2, Math.min(5, scale * factor))
-    applyTransform()
-  }, { passive: false })
-
-  svg.addEventListener('mousedown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY })
-  svg.addEventListener('mousemove', e => {
-    if (!dragging) return
-    tx += e.clientX - lastX; ty += e.clientY - lastY
-    lastX = e.clientX; lastY = e.clientY
-    applyTransform()
+  list.innerHTML = nodes.map(n => `
+    <div class="kg-entity-row${kgSelected === n.id ? ' active' : ''}" data-id="${esc(n.id)}">
+      <span class="kg-entity-type">${esc(n.type)}</span>
+      <span class="kg-entity-label" title="${esc(n.label)}">${esc(n.label)}</span>
+    </div>
+  `).join('')
+  list.querySelectorAll('.kg-entity-row').forEach(row => {
+    row.addEventListener('click', () => selectEntity(row.dataset.id))
   })
-  svg.addEventListener('mouseup', () => dragging = false)
-  svg.addEventListener('mouseleave', () => dragging = false)
+}
+
+function selectEntity(id) {
+  kgSelected = id
+  const node = kgNodes.find(n => n.id === id)
+  if (!node) return
+
+  document.querySelectorAll('.kg-entity-row').forEach(r => r.classList.toggle('active', r.dataset.id === id))
+
+  const outgoing = kgEdges.filter(e => e.source === id)
+  const incoming = kgEdges.filter(e => e.target === id)
+
+  const header = document.getElementById('kg-rel-header')
+  header.textContent = node.label + (node.type !== 'unknown' ? '  ·  ' + node.type : '')
+
+  let html = ''
+
+  if (outgoing.length) {
+    html += `<div class="kg-rel-section">
+      <div class="kg-rel-section-title">outgoing (${outgoing.length})</div>
+      <table class="kg-rel-table"><tbody>
+        ${outgoing.map(e => {
+          const target = kgNodes.find(n => n.id === e.target)
+          const conf = e.confidence < 1 ? ` <span class="kg-conf">${(e.confidence * 100).toFixed(0)}%</span>` : ''
+          const stale = !e.current ? ' <span class="kg-conf">(stale)</span>' : ''
+          return `<tr><td>${esc(e.label)}${conf}${stale}</td><td class="kg-target" data-id="${esc(e.target)}">${esc(target?.label ?? e.target)}</td></tr>`
+        }).join('')}
+      </tbody></table>
+    </div>`
+  }
+
+  if (incoming.length) {
+    html += `<div class="kg-rel-section">
+      <div class="kg-rel-section-title">incoming (${incoming.length})</div>
+      <table class="kg-rel-table"><tbody>
+        ${incoming.map(e => {
+          const source = kgNodes.find(n => n.id === e.source)
+          const conf = e.confidence < 1 ? ` <span class="kg-conf">${(e.confidence * 100).toFixed(0)}%</span>` : ''
+          const stale = !e.current ? ' <span class="kg-conf">(stale)</span>' : ''
+          return `<tr><td class="kg-target" data-id="${esc(e.source)}">${esc(source?.label ?? e.source)}</td><td>${esc(e.label)}${conf}${stale}</td></tr>`
+        }).join('')}
+      </tbody></table>
+    </div>`
+  }
+
+  if (!outgoing.length && !incoming.length) {
+    html = '<div id="kg-empty">no relationships for this entity</div>'
+  }
+
+  const body = document.getElementById('kg-rel-body')
+  body.innerHTML = html
+  body.querySelectorAll('.kg-target').forEach(el => {
+    el.addEventListener('click', () => {
+      const targetId = el.dataset.id
+      const targetNode = kgNodes.find(n => n.id === targetId)
+      if (!targetNode) return
+      // scroll entity into view and select
+      const q = document.getElementById('kg-entity-search').value.toLowerCase()
+      const filtered = q ? kgNodes.filter(n => n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q)) : kgNodes
+      if (!filtered.find(n => n.id === targetId)) {
+        document.getElementById('kg-entity-search').value = ''
+        renderEntityList(kgNodes)
+      }
+      selectEntity(targetId)
+      setTimeout(() => {
+        document.querySelector(`.kg-entity-row[data-id="${CSS.escape(targetId)}"]`)?.scrollIntoView({ block: 'nearest' })
+      }, 0)
+    })
+  })
 }
 
 // ── timeline ───────────────────────────────────────────────────────────────
 async function loadTimeline() {
-  if (timelineLoaded) return
   timelineLoaded = true
 
   const el = document.getElementById('timeline-content')
-  const data = await api('/api/drawers/recent?limit=200')
+  let url = '/api/drawers/recent?limit=200'
+  if (activeWing) url += '&wing=' + encodeURIComponent(activeWing)
+  const data = await api(url)
   const drawers = data.drawers ?? []
   if (!drawers.length) { el.innerHTML = '<div class="search-empty">no drawers</div>'; return }
 
