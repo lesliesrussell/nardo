@@ -69,26 +69,25 @@ function injectHookEntry(settings_path: string, hook_command: string): boolean {
     ? hooks['SessionStart'] as Array<Record<string, unknown>>
     : []
 
+  // Check if already present in any entry
   const exists = sessionStart.some(entry => {
     const entryHooks = Array.isArray(entry?.hooks) ? entry.hooks as Array<Record<string, unknown>> : []
     return entryHooks.some(h => h?.command === hook_command)
   })
-
   if (exists) return false
 
-  const nextSettings = {
-    ...settings,
-    hooks: {
-      ...hooks,
-      SessionStart: [
-        ...sessionStart,
-        { matcher: '', hooks: [{ type: 'command', command: hook_command }] },
-      ],
-    },
+  // Merge into first entry's hooks array (Claude Code only runs the first matching entry)
+  const newHook = { type: 'command', command: hook_command }
+  let nextSessionStart: Array<Record<string, unknown>>
+  if (sessionStart.length > 0 && Array.isArray(sessionStart[0]?.hooks)) {
+    const first = { ...sessionStart[0], hooks: [...(sessionStart[0].hooks as Array<Record<string, unknown>>), newHook] }
+    nextSessionStart = [first, ...sessionStart.slice(1)]
+  } else {
+    nextSessionStart = [{ matcher: '', hooks: [newHook] }]
   }
 
   mkdirSync(dirname(settings_path), { recursive: true })
-  writeFileSync(settings_path, JSON.stringify(nextSettings, null, 2) + '\n', 'utf-8')
+  writeFileSync(settings_path, JSON.stringify({ ...settings, hooks: { ...hooks, SessionStart: nextSessionStart } }, null, 2) + '\n', 'utf-8')
   return true
 }
 
