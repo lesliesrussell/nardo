@@ -40,6 +40,7 @@ if ! command -v nardo >/dev/null 2>&1; then
 fi
 
 if [ ! -d "$PALACE" ]; then
+  echo "nardo: no palace found — run 'nardo mine . --wing $(basename "$git_root")' to index this repo"
   exit 0
 fi
 
