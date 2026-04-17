@@ -136,5 +136,15 @@ export function setupProject(cwd = process.cwd()): SetupProjectResult {
 
   const updated_hook = injectHookEntry(project_settings_path, hook_path)
 
+  // Register MCP server for this specific project (writes to ~/.claude.json project entry)
+  try {
+    execSync(`claude mcp add --scope local nardo ${resolveNardoPath()} -- mcp --serve`, {
+      stdio: 'pipe',
+      cwd,
+    })
+  } catch {
+    // already registered — not fatal
+  }
+
   return { project_settings_path, updated_hook }
 }
