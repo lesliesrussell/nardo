@@ -7,3 +7,15 @@
 node_modules/
 .omc/
 .claude/worktrees/
+
+# local-only dirs — never track
+.beads/
+.nardo/
+.claude/
+.omc/
+
+# local-only docs
+AGENTS-nardo-beads.md
+spec-nardo.md
+SPECIFICATION.md
+token-saving.md
