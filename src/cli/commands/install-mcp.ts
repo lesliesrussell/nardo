@@ -4,7 +4,7 @@ import { homedir } from 'os'
 import { join } from 'path'
 import type { Command } from 'commander'
 
-const MCP_ENTRY = { command: 'nardo', args: ['mcp'] }
+const MCP_ENTRY = { command: 'nardo', args: ['mcp', '--serve'] }
 
 function loadSettings(path: string): Record<string, unknown> {
   if (!existsSync(path)) return {}
