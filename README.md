@@ -18,7 +18,7 @@ Local-first memory system for AI agents. 100% verbatim recall, zero API dependen
 | **Runtime** | Bun | Native TypeScript, built-in test runner, `bun:sqlite` |
 | **Language** | TypeScript | Type safety, first-class MCP SDK support |
 | **Vector Store** | hnswlib-node | HNSW cosine index (custom SQLite integration) |
-| **Embeddings** | ollama / @xenova/transformers | ollama (recommended): nomic-embed-text 768-dim. Fallback: Xenova/all-MiniLM-L6-v2 384-dim |
+| **Embeddings** | @xenova/transformers / ollama | Default: Xenova/all-MiniLM-L6-v2 384-dim (bundled). Recommended upgrade: ollama nomic-embed-text 768-dim |
 | **Knowledge Graph** | bun:sqlite | Embedded temporal KG, zero ops |
 | **MCP Server** | @modelcontextprotocol/sdk | Claude-native memory interface |
 | **CLI** | commander | Command-line interface |
@@ -29,11 +29,11 @@ Local-first memory system for AI agents. 100% verbatim recall, zero API dependen
 
 - Bun >= 1.0.0 ([install](https://bun.sh))
 - macOS/Linux: Xcode CLT or build-essential (required by `hnswlib-node` native bindings)
-- **Recommended**: [ollama](https://ollama.com) with `nomic-embed-text` for best retrieval quality:
+- **Optional upgrade**: [ollama](https://ollama.com) with `nomic-embed-text` for higher-quality 768-dim embeddings:
   ```bash
   ollama pull nomic-embed-text
   ```
-  Without ollama, nardo falls back to the bundled Xenova/all-MiniLM-L6-v2 model (~150MB download on first run, stored in `~/.cache/huggingface/`).
+  Without ollama, nardo uses the bundled Xenova/all-MiniLM-L6-v2 model (384-dim, ~150MB download on first run, stored in `~/.cache/huggingface/`). This is the default.
 
 ### Install from npm (recommended)
 
@@ -98,7 +98,7 @@ nardo search "why did we switch databases"
 Options:
 - `--wing <name>`: Limit to specific category
 - `--room <name>`: Limit to specific subcategory
-- `--limit <n>`: Max results (default 10)
+- `--limit <n>`: Max results (default 5)
 
 ### 3. Connect Claude Code to nardo
 
@@ -146,8 +146,10 @@ nardo install-hooks
 | `import` | Import drawers from JSONL | `nardo import backup.jsonl` |
 | `init <path>` | Initialize project metadata and default config | `nardo init .` |
 | `wake-up` | Load memory layers (L0-L3) | `nardo wake-up` |
+| `dashboard` | Start the web dashboard (default port 7432) | `nardo dashboard --port 7432` |
 | `install-hooks` | One-time global hook + MCP setup | `nardo install-hooks` |
-| `setup` | Per-project wake-up hook registration | `nardo setup` |
+| `install-mcp` | Register nardo as global MCP server | `nardo install-mcp` |
+| `setup` | Per-project setup (injects hook + local MCP) | `nardo setup` |
 | `mcp --serve` | Start MCP server (stdio) | `nardo mcp --serve` |
 | `repair` | Interactive palace repair | `nardo repair` |
 | `dedup` | Remove near-duplicate drawers | `nardo dedup --threshold 0.15` |
@@ -206,6 +208,7 @@ The MCP server exposes these tools for Claude Code and other MCP clients:
 | Tool | Description |
 |------|-------------|
 | `nardo_reconnect` | Reconnect to palace after connection loss |
+| `nardo_check_duplicate` | Check whether content is a near-duplicate of an existing drawer before adding |
 
 ## Token Efficiency
 
@@ -347,22 +350,19 @@ The search system combines multiple ranking signals:
 
 ## Hook Setup
 
-nardo integrates with Claude Code hooks for background memory saving.
+nardo integrates with Claude Code hooks to load memory context at the start of each session.
 
-### Stop Hook
+### SessionStart Hook
 
-**File**: `~/.claude/hooks/mempal_save_hook.sh`
+**File**: `~/.claude/hooks/nardo_wakeup.sh`
 
-**Trigger**: When user stops typing
+**Trigger**: When a Claude Code session starts
 
-**Example**:
+**What it does**: Reads the current git repo, finds the palace, and calls `nardo wake-up` to load L0+L1 memory context into the session.
+
+Install automatically with:
 ```bash
-#!/bin/bash
-diary_text="$NARDO_DIARY"
-bun run /path/to/nardo/src/mcp/server.ts \
-  --diary-text "$diary_text" \
-  --wing "sessions" \
-  --room "$(date +%Y-%m-%d)"
+nardo install-hooks
 ```
 
 ### PreCompact Hook
@@ -391,7 +391,7 @@ Location: `.nardo/config.json` in the repo root (optional — most settings have
     "creative"
   ],
   "embedding": {
-    "provider": "ollama",
+    "provider": "xenova",
     "model": "nomic-embed-text",
     "ollama_url": "http://localhost:11434"
   },
@@ -409,7 +409,7 @@ Location: `.nardo/config.json` in the repo root (optional — most settings have
 | `palace_path` | string | `repo-local .nardo/palace (requires git repo)` | Optional explicit override |
 | `collection_name` | string | `nardo_drawers` | Main collection name |
 | `topic_wings` | array | 7 defaults | Default wing categories |
-| `embedding.provider` | string | `ollama` | `ollama` or `xenova` |
+| `embedding.provider` | string | `xenova` | `xenova` (default, bundled) or `ollama` (recommended upgrade) |
 | `embedding.model` | string | `nomic-embed-text` | Model name for ollama |
 | `embedding.ollama_url` | string | `http://localhost:11434` | ollama server URL |
 | `hooks.silent_save` | bool | `true` | Save directly or call MCP |
@@ -436,8 +436,8 @@ nardo dedup --threshold 0.15
 
 Algorithm:
 1. Group drawers by source_file
-2. For groups with 5+ drawers, score similarity (cosine distance < threshold)
-3. Keep longest drawer from each group
+2. Score pairwise similarity within each group (cosine distance < threshold)
+3. Keep longest drawer from each duplicate cluster
 4. Delete marked duplicates
 
 Threshold default: 0.15 (configurable, lower = stricter dedup).
@@ -483,12 +483,9 @@ bun test
 nardo <command>
 ```
 
-### Type Check
+### Run Entry Point
 
-TypeScript is configured with strict mode. Run:
-```bash
-bun run dev
-```
+`bun run dev` runs `src/index.ts` directly. There is no separate typecheck script — TypeScript type errors surface via the LSP or at runtime under Bun.
 
 ### Build
 
@@ -528,8 +525,7 @@ src/
 │   └── wikipedia.ts        # Entity disambiguation
 ├── kg/                     # Knowledge graph
 │   ├── graph.ts            # Triple CRUD
-│   ├── ddl.ts              # Schema and migrations
-│   └── query.ts            # Graph queries
+│   └── ddl.ts              # Schema and migrations
 ├── wakeup/                 # Memory layers
 │   ├── l0.ts               # Identity layer
 │   ├── l1.ts               # Essential story
@@ -548,8 +544,4 @@ src/
 
 ## License
 
-See LICENSE file in repository.
-
-## Contributing
-
-See CONTRIBUTING.md for development guidelines and pull request process.
+MIT
