@@ -56,7 +56,7 @@ export function installWakeupHook(home = homedir()): InstallHooksResult {
   const hooks = (settings.hooks && typeof settings.hooks === 'object')
     ? settings.hooks as Record<string, unknown>
     : {}
-  const sessionStart = Array.isArray(hooks.sessionStart) ? hooks.sessionStart as Array<Record<string, unknown>> : []
+  const sessionStart = Array.isArray(hooks['SessionStart']) ? hooks['SessionStart'] as Array<Record<string, unknown>> : []
   const installed_command = hook_path
   const exists = sessionStart.some(entry => entry?.command === installed_command)
 
@@ -68,7 +68,7 @@ export function installWakeupHook(home = homedir()): InstallHooksResult {
     ...settings,
     hooks: {
       ...hooks,
-      sessionStart: nextSessionStart,
+      SessionStart: nextSessionStart,
     },
   }
 

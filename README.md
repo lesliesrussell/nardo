@@ -100,18 +100,31 @@ Options:
 - `--room <name>`: Limit to specific subcategory
 - `--limit <n>`: Max results (default 10)
 
-### 3. Run the MCP Server
+### 3. Connect Claude Code to nardo (one-time global setup)
 
-Expose the palace as an MCP server for Claude Code:
+Register nardo as a permanent MCP server so every Claude Code session has access to nardo tools:
 
 ```bash
-nardo mcp
+nardo install-mcp      # writes to ~/.claude/settings.json
+nardo install-hooks    # adds sessionStart wake-up hook
 ```
 
-Claude can then use tools like `nardo_search`, `nardo_add_drawer`, and `nardo_kg_query`.
+Then restart Claude Code. That's it — nardo tools (`nardo_search`, `nardo_add_drawer`, `nardo_kg_query`, etc.) will be available in every session, and L0+L1 wake-up context loads automatically on start.
 
-Inside a git repo, `nardo mcp` serves the repo-local palace at `.nardo/palace` by default.
-Use `--palace /path/to/global-palace` only when you explicitly want to point MCP somewhere else.
+**Manual alternative** — if you prefer to edit `~/.claude/settings.json` directly:
+
+```json
+{
+  "mcpServers": {
+    "nardo": {
+      "command": "nardo",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Claude Code spawns MCP servers with the project root as the working directory, so `nardo mcp` auto-detects the repo-local `.nardo/palace` for whichever repo you're in — no path hardcoding needed.
 
 ## CLI Reference
 
