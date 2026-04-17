@@ -14,7 +14,20 @@ export function registerDashboard(program: Command): void {
       const palace_path = opts.palace ?? config.palace_path
       const port = parseInt(opts.port, 10) || 7432
 
-      const { url, server } = startDashboardServer({ palace_path, port })
+      let url: string
+      let server: ReturnType<typeof import('../../dashboard/server.js').startDashboardServer>['server']
+      try {
+        ;({ url, server } = startDashboardServer({ palace_path, port }))
+      } catch (err: unknown) {
+        const isAddrInUse = err instanceof Error && (err.message.includes('EADDRINUSE') || err.message.includes('in use'))
+        if (isAddrInUse) {
+          console.error(`\n  error: port ${port} is already in use.`)
+          console.error(`  Kill the existing process:  lsof -ti:${port} | xargs kill`)
+          console.error(`  Or use a different port:    nardo dashboard --port ${port + 1}\n`)
+          process.exit(1)
+        }
+        throw err
+      }
 
       console.log(`\n  nardo dashboard`)
       console.log(`  palace: ${palace_path}`)
