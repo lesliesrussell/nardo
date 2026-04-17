@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS drawers (
   filed_at VARCHAR(191) NOT NULL,
   ingest_mode VARCHAR(191) DEFAULT 'project',
   importance DOUBLE DEFAULT 1.0,
+  retrieval_count INTEGER DEFAULT 0,
   chunk_size BIGINT NOT NULL
 );
 
@@ -63,6 +64,7 @@ interface SqliteDrawerRow {
   filed_at: string
   ingest_mode: string
   importance: number
+  retrieval_count: number
   chunk_size: number
 }
 
@@ -180,7 +182,7 @@ export function migrateSqlitePalaceToDolt(
   const sqlite = new Database(sqlitePath, { readonly: true })
   const drawers = sqlite.query<SqliteDrawerRow, []>(
     `SELECT id, document, label, wing, room, source_file, source_mtime, chunk_index,
-            normalize_version, added_by, filed_at, ingest_mode, importance, chunk_size
+            normalize_version, added_by, filed_at, ingest_mode, importance, retrieval_count, chunk_size
      FROM drawers ORDER BY label ASC`,
   ).all()
   const closets = sqlite.query<SqliteClosetRow, []>(
@@ -212,6 +214,7 @@ export function migrateSqlitePalaceToDolt(
         'filed_at',
         'ingest_mode',
         'importance',
+        'retrieval_count',
         'chunk_size',
       ],
       batch.map(row => [
@@ -228,6 +231,7 @@ export function migrateSqlitePalaceToDolt(
         row.filed_at,
         row.ingest_mode,
         row.importance,
+        row.retrieval_count,
         row.chunk_size,
       ]),
     )

@@ -62,6 +62,7 @@ export interface Collection {
   count(): Promise<number>
   fts5Score(ids: string[], query: string): Promise<Map<string, number>>
   getEmbeddings(ids: string[]): Promise<Map<string, number[]>>
+  incrementRetrievalCount(ids: string[]): Promise<void>
 }
 
 const MAX_ELEMENTS = 10000
@@ -86,6 +87,7 @@ CREATE TABLE IF NOT EXISTS drawers (
   filed_at TEXT NOT NULL,
   ingest_mode TEXT DEFAULT 'project',
   importance REAL DEFAULT 1.0,
+  retrieval_count INTEGER DEFAULT 0,
   chunk_size INTEGER NOT NULL
 );
 
@@ -258,6 +260,12 @@ export async function openPalaceDB(
 
   const db = new SqlitePalaceDB(join(palacePath, 'palace.sqlite3'))
   await db.exec(SQLITE_DDL)
+
+  // Migrate: add retrieval_count if missing (existing palaces)
+  const cols = await db.all<{ name: string }>('PRAGMA table_info(drawers)')
+  if (!cols.some(c => c.name === 'retrieval_count')) {
+    await db.run('ALTER TABLE drawers ADD COLUMN retrieval_count INTEGER DEFAULT 0')
+  }
 
   const ftsRow = await db.get<{ n: number }>('SELECT count(*) as n FROM drawers_fts')
   const drawerRow = await db.get<{ n: number }>('SELECT count(*) as n FROM drawers')
@@ -605,6 +613,15 @@ class DrawersCollection implements Collection {
     }
     return result
   }
+
+  async incrementRetrievalCount(ids: string[]): Promise<void> {
+    if (!ids.length) return
+    const placeholders = ids.map(() => '?').join(',')
+    await this.db.run(
+      `UPDATE drawers SET retrieval_count = retrieval_count + 1 WHERE id IN (${placeholders})`,
+      ids,
+    )
+  }
 }
 
 class ClosetsCollection implements Collection {
@@ -818,6 +835,8 @@ class ClosetsCollection implements Collection {
   async getEmbeddings(_ids: string[]): Promise<Map<string, number[]>> {
     return new Map()
   }
+
+  async incrementRetrievalCount(_ids: string[]): Promise<void> {}
 }
 
 export class PalaceClient {

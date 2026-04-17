@@ -15,6 +15,7 @@ export interface DrawerMetadata {
   ingest_mode: 'project' | 'convo' | 'diary' | 'registry'
   importance: number
   chunk_size: number
+  retrieval_count?: number
 }
 
 export interface DrawerResult {

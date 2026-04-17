@@ -15,6 +15,8 @@ export interface SearchOptions {
   mmr_lambda?: number
   /** Importance decay half-life in days (default: 90). Set to 0 to disable decay. */
   decay_halflife?: number
+  /** How much each retrieval counteracts age decay (default 0.3) */
+  retrieval_weight?: number
   /** Expand query with synonyms before embedding (default: true). Improves recall for terse queries. */
   expand?: boolean
   /** Search all wings regardless of wing filter (default: false). Results are tagged with their origin wing. */
@@ -66,6 +68,18 @@ function buildWhereFilter(wing?: string, room?: string): Record<string, unknown>
     return { wing: { '$eq': wing } }
   }
   return undefined
+}
+
+type QueryType = 'keyword' | 'semantic' | 'default'
+
+function detectQueryType(query: string): QueryType {
+  const words = query.trim().split(/\s+/)
+  const hasQuote = /["']/.test(query)
+  const hasCamelOrSnake = /[a-z][A-Z]|[a-zA-Z]_[a-zA-Z]/.test(query)
+  const hasQuestionWord = /\b(how|why|what|when|where|which|who|explain|describe)\b/i.test(query)
+  if (hasQuote || hasCamelOrSnake || words.length <= 3) return 'keyword'
+  if (hasQuestionWord || words.length >= 6) return 'semantic'
+  return 'default'
 }
 
 export class HybridSearcher {
@@ -168,7 +182,7 @@ export class HybridSearcher {
       const closetHit = closetHits.get(source_file)
       if (closetHit) {
         const rank = Math.min(closetHit.rank, RANK_BOOSTS.length - 1)
-        closet_boost = RANK_BOOSTS[rank]
+        closet_boost = RANK_BOOSTS[rank] * (1 - closetHit.distance)
         effective_distance = distance - closet_boost
         matched_via = 'drawer+closet'
         closet_preview = closetHit.preview
@@ -177,17 +191,25 @@ export class HybridSearcher {
       const bm25_norm = normBm25Scores.get(id) ?? 0
       const effective_vec_sim = Math.max(0, 1 - effective_distance)
 
-      // Importance with optional recency decay: importance * 1/(1 + days_old/halflife)
+      // Importance with optional recency decay: importance * 1/(1 + effective_age/halflife)
+      // retrieval_count counteracts age decay proportionally
       const importance = (meta.importance as number) ?? 0.5
+      const retrieval_count = (meta.retrieval_count as number) ?? 0
       const halflife = opts.decay_halflife ?? 90
       let decayed_importance = importance
       if (halflife > 0 && meta.filed_at) {
         const daysOld = (Date.now() - new Date(meta.filed_at as string).getTime()) / 86_400_000
-        decayed_importance = importance * (1 / (1 + daysOld / halflife))
+        const k = opts.retrieval_weight ?? 0.3
+        const effective_age = daysOld / (1 + retrieval_count * k)
+        decayed_importance = importance * (1 / (1 + effective_age / halflife))
       }
 
-      // 55% vec_sim + 35% BM25 + 10% decayed importance
-      const final_score = 0.55 * effective_vec_sim + 0.35 * bm25_norm + 0.10 * decayed_importance
+      // Query-adaptive weights: keyword → BM25-heavy, semantic → vec-heavy, default → balanced
+      const qt = detectQueryType(clean_query)
+      const [wVec, wBm25, wImp] = qt === 'keyword' ? [0.35, 0.55, 0.10]
+        : qt === 'semantic' ? [0.65, 0.25, 0.10]
+        : [0.55, 0.35, 0.10]
+      const final_score = wVec * effective_vec_sim + wBm25 * bm25_norm + wImp * decayed_importance
 
       const result: SearchResult = {
         text,
@@ -234,6 +256,10 @@ export class HybridSearcher {
     } else {
       results = scored.slice(0, n_results).map(s => s.result)
     }
+
+    // Fire-and-forget retrieval tracking — never blocks the response
+    const resultIds = results.map(r => resultToDrawerId.get(r)).filter((id): id is string => id != null)
+    void (drawersCol as Collection).incrementRetrievalCount(resultIds).catch(() => {})
 
     return {
       query: clean_query,
