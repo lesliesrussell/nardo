@@ -116,9 +116,9 @@ nardo setup            # injects wake-up hook into this project's .claude/settin
 
 Then restart Claude Code. nardo tools (`nardo_search`, `nardo_add_drawer`, `nardo_kg_query`, etc.) will be available in every session, and L0+L1 wake-up context loads automatically on start.
 
-> **How it works:** `install-hooks` registers nardo globally via `claude mcp add --scope user`, which writes to `~/.claude.json`. This makes nardo available in every project. `setup` adds the session-start hook to a project's `.claude/settings.json` so wake-up context loads when you open that repo.
+> **How it works:** `install-hooks` registers nardo globally via `claude mcp add --scope user`. `setup` runs `claude mcp add --scope local` to register nardo in that project's entry in `~/.claude.json` — needed because Claude Code's per-project entry overrides the global `mcpServers` when it exists.
 >
-> **Why not just `settings.json`?** Claude Code reads MCP servers from `~/.claude.json`, not from `settings.json`. Editing `mcpServers` in `settings.json` is silently ignored.
+> **Why not just `settings.json`?** Claude Code reads MCP servers from `~/.claude.json`, not `settings.json`. The `mcpServers` key in `settings.json` is silently ignored.
 
 **Manual alternative:**
 
