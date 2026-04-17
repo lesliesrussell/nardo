@@ -100,31 +100,41 @@ Options:
 - `--room <name>`: Limit to specific subcategory
 - `--limit <n>`: Max results (default 10)
 
-### 3. Connect Claude Code to nardo (one-time global setup)
+### 3. Connect Claude Code to nardo
 
-Register nardo as a permanent MCP server so every Claude Code session has access to nardo tools:
+**One-time global setup** (run once after installing nardo):
 
 ```bash
-nardo install-mcp      # writes to ~/.claude/settings.json
-nardo install-hooks    # adds sessionStart wake-up hook
+nardo install-hooks    # writes hook script + registers in ~/.claude/settings.json
 ```
 
-Then restart Claude Code. That's it — nardo tools (`nardo_search`, `nardo_add_drawer`, `nardo_kg_query`, etc.) will be available in every session, and L0+L1 wake-up context loads automatically on start.
+**Per-project setup** (run once in each repo you want nardo active):
 
-**Manual alternative** — if you prefer to edit `~/.claude/settings.json` directly:
+```bash
+nardo setup            # injects wake-up hook + MCP server into .claude/settings.json
+```
+
+Then restart Claude Code. nardo tools (`nardo_search`, `nardo_add_drawer`, `nardo_kg_query`, etc.) will be available and L0+L1 wake-up context loads automatically on session start.
+
+> **Why two commands?** Claude Code project-level `.claude/settings.json` completely suppresses global `mcpServers`. Running `nardo setup` in a project writes both the hook and the MCP registration directly into the project settings so nothing gets overridden.
+
+**Manual alternative** — add to your project's `.claude/settings.json`:
 
 ```json
 {
+  "hooks": {
+    "SessionStart": [{ "matcher": "", "hooks": [{ "type": "command", "command": "/path/to/.claude/hooks/nardo_wakeup.sh" }] }]
+  },
   "mcpServers": {
     "nardo": {
-      "command": "nardo",
-      "args": ["mcp"]
+      "command": "/path/to/nardo",
+      "args": ["mcp", "--serve"]
     }
   }
 }
 ```
 
-Claude Code spawns MCP servers with the project root as the working directory, so `nardo mcp` auto-detects the repo-local `.nardo/palace` for whichever repo you're in — no path hardcoding needed.
+Use `which nardo` to get the absolute path — relative commands may not resolve in Claude Code's restricted PATH environment.
 
 ## CLI Reference
 
@@ -142,7 +152,9 @@ Claude Code spawns MCP servers with the project root as the working directory, s
 | `import` | Import drawers from JSONL | `nardo import backup.jsonl` |
 | `init <path>` | Initialize project metadata and default config | `nardo init .` |
 | `wake-up` | Load memory layers (L0-L3) | `nardo wake-up` |
-| `mcp` | Start MCP server | `nardo mcp` |
+| `install-hooks` | One-time global hook + settings setup | `nardo install-hooks` |
+| `setup` | Per-project hook + MCP registration | `nardo setup` |
+| `mcp --serve` | Start MCP server (stdio) | `nardo mcp --serve` |
 | `repair` | Interactive palace repair | `nardo repair` |
 | `dedup` | Remove near-duplicate drawers | `nardo dedup --threshold 0.15` |
 | `forget` | Delete drawers by filter | `nardo forget --source-file myfile.txt --dry-run` |
