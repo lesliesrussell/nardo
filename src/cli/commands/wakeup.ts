@@ -4,7 +4,7 @@ import { loadConfig } from '../../config.js'
 import { loadL0 } from '../../wakeup/l0.js'
 import { generateL1 } from '../../wakeup/l1.js'
 import { renderWakeupText } from '../../wakeup/render.js'
-import { installWakeupHook } from '../../wakeup/hooks.js'
+import { installWakeupHook, setupProject } from '../../wakeup/hooks.js'
 
 export function registerWakeup(program: Command): void {
   program
@@ -36,18 +36,25 @@ export function registerWakeup(program: Command): void {
 
   program
     .command('install-hooks')
-    .description('Install a Claude Code sessionStart hook that runs nardo wake-up automatically')
+    .description('Install nardo wake-up hook globally (~/.claude/settings.json)')
     .action(() => {
       const result = installWakeupHook()
       console.log(`Hook: ${result.hook_path}`)
       console.log(`Global settings: ${result.global_settings_path}`)
-      if (result.project_settings_path) {
-        console.log(`Project settings: ${result.project_settings_path}`)
-      }
-      const updated = result.updated_global || result.updated_project
-      console.log(updated ? 'Installed SessionStart hook.' : 'Hook already present.')
-      if (result.updated_project_mcp) {
-        console.log('Added nardo MCP server to project settings.')
-      }
+      console.log(result.updated_global ? 'Installed SessionStart hook.' : 'Hook already present.')
+      console.log('')
+      console.log('Run "nardo setup" in each project to register the MCP server there.')
+    })
+
+  program
+    .command('setup')
+    .description('Register nardo hook + MCP server in this project (.claude/settings.json)')
+    .action(() => {
+      const result = setupProject()
+      console.log(`Project settings: ${result.project_settings_path}`)
+      if (result.updated_hook) console.log('Added SessionStart hook.')
+      if (result.updated_mcp) console.log(`Added nardo MCP server (${result.nardo_path}).`)
+      if (!result.updated_hook && !result.updated_mcp) console.log('Already configured.')
+      console.log('Restart Claude Code to activate.')
     })
 }

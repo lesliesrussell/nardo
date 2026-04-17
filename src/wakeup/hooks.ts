@@ -6,11 +6,15 @@ import { execSync } from 'child_process'
 export interface InstallHooksResult {
   hook_path: string
   global_settings_path: string
-  project_settings_path: string | null
   installed_command: string
   updated_global: boolean
-  updated_project: boolean
-  updated_project_mcp: boolean
+}
+
+export interface SetupProjectResult {
+  project_settings_path: string
+  updated_hook: boolean
+  updated_mcp: boolean
+  nardo_path: string
 }
 
 export function getClaudePaths(home = homedir()): {
@@ -116,7 +120,7 @@ function injectMcpEntry(settings_path: string, nardo_path: string): boolean {
   return true
 }
 
-export function installWakeupHook(home = homedir(), cwd = process.cwd()): InstallHooksResult {
+export function installWakeupHook(home = homedir()): InstallHooksResult {
   const { hooks_dir, hook_path, settings_path: global_settings_path } = getClaudePaths(home)
 
   mkdirSync(hooks_dir, { recursive: true })
@@ -125,23 +129,22 @@ export function installWakeupHook(home = homedir(), cwd = process.cwd()): Instal
 
   const updated_global = injectHookEntry(global_settings_path, hook_path)
 
-  // Inject into project-level .claude/settings.json (hook + mcpServers)
-  const project_settings_path = join(cwd, '.claude', 'settings.json')
-  let updated_project = false
-  let updated_project_mcp = false
-  if (existsSync(project_settings_path)) {
-    const nardo_path = resolveNardoPath()
-    updated_project = injectHookEntry(project_settings_path, hook_path)
-    updated_project_mcp = injectMcpEntry(project_settings_path, nardo_path)
-  }
-
   return {
     hook_path,
     global_settings_path,
-    project_settings_path: existsSync(project_settings_path) ? project_settings_path : null,
     installed_command: hook_path,
     updated_global,
-    updated_project,
-    updated_project_mcp,
   }
+}
+
+export function setupProject(cwd = process.cwd()): SetupProjectResult {
+  const { hook_path } = getClaudePaths()
+  const project_settings_path = join(cwd, '.claude', 'settings.json')
+  mkdirSync(join(cwd, '.claude'), { recursive: true })
+
+  const nardo_path = resolveNardoPath()
+  const updated_hook = injectHookEntry(project_settings_path, hook_path)
+  const updated_mcp = injectMcpEntry(project_settings_path, nardo_path)
+
+  return { project_settings_path, updated_hook, updated_mcp, nardo_path }
 }
