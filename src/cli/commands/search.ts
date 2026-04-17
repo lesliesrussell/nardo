@@ -1,5 +1,13 @@
 // search command
 import type { Command } from 'commander'
+
+const c = {
+  bold:  (s: string) => `\x1b[1m${s}\x1b[0m`,
+  dim:   (s: string) => `\x1b[2m${s}\x1b[0m`,
+  cyan:  (s: string) => `\x1b[36m${s}\x1b[0m`,
+  green: (s: string) => `\x1b[32m${s}\x1b[0m`,
+  yellow:(s: string) => `\x1b[33m${s}\x1b[0m`,
+}
 import { PalaceClient } from '../../palace/client.js'
 import { HybridSearcher } from '../../search/hybrid.js'
 import { getEmbeddingPipeline } from '../../embeddings/pipeline.js'
@@ -35,34 +43,27 @@ export function registerSearch(program: Command): void {
         process.exit(1)
       }
 
-      const SEP = '============================================================'
-      const THIN = '──────────────────────────────────────────────────────────'
-      console.log(SEP)
-      console.log(`  Results for: "${response.query}"`)
-      if (opts.wing) console.log(`  Wing: ${opts.wing}`)
-      if (opts.room) console.log(`  Room: ${opts.room}`)
-      console.log(SEP)
+      console.log()
+      console.log(c.bold(`  ${response.query}`))
+      const filters = [opts.wing && `wing:${opts.wing}`, opts.room && `room:${opts.room}`].filter(Boolean)
+      if (filters.length) console.log(c.dim(`  ${filters.join('  ')}`))
       console.log()
 
       if (response.results.length === 0) {
-        console.log('  No results found.')
+        console.log(c.dim('  No results found.'))
         return
       }
 
       for (let i = 0; i < response.results.length; i++) {
         const r = response.results[i]
         const source = r.source_file ? r.source_file.split('/').pop() ?? r.source_file : ''
-        console.log(`  [${i + 1}] ${r.wing} / ${r.room}`)
-        console.log(`      Source: ${source}`)
-        console.log(`      Match:  ${r.similarity.toFixed(2)}`)
-        console.log()
-        // Indent text
-        const lines = r.text.split('\n').slice(0, 6)
+        const score = r.similarity >= 0.7 ? c.green(r.similarity.toFixed(2)) : r.similarity >= 0.55 ? c.yellow(r.similarity.toFixed(2)) : c.dim(r.similarity.toFixed(2))
+        console.log(`  ${c.dim(`${i + 1}.`)} ${c.cyan(`${r.wing}`)}${c.dim('/')}${r.room}  ${c.dim(source)}  ${score}`)
+        const lines = r.text.split('\n').slice(0, 5).filter(l => l.trim())
         for (const line of lines) {
-          console.log(`      ${line}`)
+          console.log(c.dim(`     ${line.slice(0, 100)}`))
         }
         console.log()
-        console.log(`  ${THIN}`)
       }
     })
 }
