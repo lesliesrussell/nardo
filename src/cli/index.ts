@@ -25,6 +25,7 @@ import { registerMineGit } from './commands/mine-git.js'
 import { registerReembed } from './commands/reembed.js'
 import { registerDolt } from './commands/dolt.js'
 import { registerInstallMcp } from './commands/install-mcp.js'
+import { registerDashboard } from './commands/dashboard.js'
 
 const program = new Command()
 
@@ -57,6 +58,7 @@ registerMineGit(program)
 registerReembed(program)
 registerDolt(program)
 registerInstallMcp(program)
+registerDashboard(program)
 
 try {
   await program.parseAsync(process.argv)
