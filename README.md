@@ -332,17 +332,29 @@ Options:
 
 ### Hybrid Search Scoring
 
-The search system combines multiple ranking signals:
-- **Vector similarity** (55%): Cosine distance from embeddings
-- **Keyword ranking** (35%): BM25 relevance via SQLite FTS5
-- **Importance decay** (10%): Recent content scores higher
+The search system combines multiple ranking signals with **query-adaptive weights**:
+
+| Query type | Detection | Vector | BM25 | Importance |
+|---|---|---|---|---|
+| Keyword | ≤3 words, camelCase/snake_case, or quoted phrase | 35% | 55% | 10% |
+| Semantic | ≥6 words or question words (how/why/what/…) | 65% | 25% | 10% |
+| Default | everything else | 55% | 35% | 10% |
+
+**Closet boost**: When a file-level summary (closet) matches the query, drawers from that file receive a rank-based boost scaled by closet match quality: `RANK_BOOSTS[rank] × (1 − closet_distance)`.
+
+**Retrieval tracking**: Every drawer that appears in search results has its `retrieval_count` incremented automatically. Context window inclusion is the usage signal — it influences the agent regardless of explicit action.
+
+**Usage-protected importance decay**: Importance decays with age, but retrieval history counteracts that decay:
+```
+effective_age    = days_old / (1 + retrieval_count × retrieval_weight)
+decayed_importance = importance × 1 / (1 + effective_age / halflife)
+```
+Defaults: `halflife=90` days, `retrieval_weight=0.3`. A drawer retrieved 10 times decays ~4× slower. Never-retrieved drawers follow the normal schedule. Set `decay_halflife=0` to disable.
 
 **MMR Reranking**: Control diversity with `mmr_lambda` parameter (0.0–1.0, default 0.7):
 - 1.0 = pure relevance
 - 0.7 = balanced (default)
 - 0.0 = pure diversity
-
-**Importance decay**: Content scores decay over time. Configure half-life in days (default 90). Set to 0 to disable.
 
 **Query expansion**: Terse queries are automatically expanded with synonyms before embedding. E.g. `auth` embeds as `auth authentication login jwt session token oauth`. BM25 still uses the original query for precision. Disable with `expand: false`.
 
