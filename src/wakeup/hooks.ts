@@ -58,11 +58,19 @@ export function installWakeupHook(home = homedir()): InstallHooksResult {
     : {}
   const sessionStart = Array.isArray(hooks['SessionStart']) ? hooks['SessionStart'] as Array<Record<string, unknown>> : []
   const installed_command = hook_path
-  const exists = sessionStart.some(entry => entry?.command === installed_command)
 
-  const nextSessionStart = exists
-    ? sessionStart
-    : [...sessionStart, { command: installed_command }]
+  // Check if already installed in the new matcher+hooks format
+  const exists = sessionStart.some(entry => {
+    const entryHooks = Array.isArray(entry?.hooks) ? entry.hooks as Array<Record<string, unknown>> : []
+    return entryHooks.some(h => h?.command === installed_command)
+  })
+
+  const newEntry = {
+    matcher: '',
+    hooks: [{ type: 'command', command: installed_command }],
+  }
+
+  const nextSessionStart = exists ? sessionStart : [...sessionStart, newEntry]
 
   const nextSettings = {
     ...settings,
