@@ -39,7 +39,7 @@ describe('installWakeupHook', () => {
     const first = installWakeupHook(tmpHome)
     expect(existsSync(first.hook_path)).toBe(true)
     expect(existsSync(first.settings_path)).toBe(true)
-    expect(readFileSync(first.hook_path, 'utf-8')).toContain('nardo wake-up --json')
+    expect(readFileSync(first.hook_path, 'utf-8')).toContain('nardo wake-up')
 
     const settings = JSON.parse(readFileSync(first.settings_path, 'utf-8')) as {
       hooks: { SessionStart: Array<{ matcher: string; hooks: Array<{ type: string; command: string }> }> }

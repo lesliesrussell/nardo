@@ -27,13 +27,24 @@ export function getClaudePaths(home = homedir()): {
 
 export function getWakeupHookScript(): string {
   return `#!/bin/bash
+# Expand PATH so nardo is findable regardless of how Claude Code launches the hook
+export PATH="$PATH:$HOME/.bun/bin:$HOME/.npm-global/bin:/usr/local/bin:/opt/homebrew/bin"
+
 git_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 
 PALACE="\${NARDO_PALACE_PATH:-$git_root/.nardo/palace}"
 
-if command -v nardo >/dev/null 2>&1 && [ -d "$PALACE" ]; then
-  nardo wake-up --json --wing "$(basename "$PWD")" 2>/dev/null
+if ! command -v nardo >/dev/null 2>&1; then
+  echo "nardo: not found in PATH — skipping wake-up (run 'nardo install-hooks' after installing)"
+  exit 0
 fi
+
+if [ ! -d "$PALACE" ]; then
+  exit 0
+fi
+
+echo "nardo: loading memory..."
+nardo wake-up --wing "$(basename "$git_root")"
 `
 }
 
