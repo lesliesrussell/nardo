@@ -1,12 +1,14 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
-import { join } from 'path'
+import { join, dirname } from 'path'
 
 export interface InstallHooksResult {
   hook_path: string
-  settings_path: string
+  global_settings_path: string
+  project_settings_path: string | null
   installed_command: string
-  updated_settings: boolean
+  updated_global: boolean
+  updated_project: boolean
 }
 
 export function getClaudePaths(home = homedir()): {
@@ -58,46 +60,60 @@ function loadSettings(settings_path: string): Record<string, unknown> {
   }
 }
 
-export function installWakeupHook(home = homedir()): InstallHooksResult {
-  const { hooks_dir, hook_path, settings_path } = getClaudePaths(home)
-  mkdirSync(hooks_dir, { recursive: true })
-  writeFileSync(hook_path, getWakeupHookScript(), 'utf-8')
-  chmodSync(hook_path, 0o755)
-
+function injectHookEntry(settings_path: string, hook_command: string): boolean {
   const settings = loadSettings(settings_path)
   const hooks = (settings.hooks && typeof settings.hooks === 'object')
     ? settings.hooks as Record<string, unknown>
     : {}
-  const sessionStart = Array.isArray(hooks['SessionStart']) ? hooks['SessionStart'] as Array<Record<string, unknown>> : []
-  const installed_command = hook_path
+  const sessionStart = Array.isArray(hooks['SessionStart'])
+    ? hooks['SessionStart'] as Array<Record<string, unknown>>
+    : []
 
-  // Check if already installed in the new matcher+hooks format
   const exists = sessionStart.some(entry => {
     const entryHooks = Array.isArray(entry?.hooks) ? entry.hooks as Array<Record<string, unknown>> : []
-    return entryHooks.some(h => h?.command === installed_command)
+    return entryHooks.some(h => h?.command === hook_command)
   })
 
-  const newEntry = {
-    matcher: '',
-    hooks: [{ type: 'command', command: installed_command }],
-  }
-
-  const nextSessionStart = exists ? sessionStart : [...sessionStart, newEntry]
+  if (exists) return false
 
   const nextSettings = {
     ...settings,
     hooks: {
       ...hooks,
-      SessionStart: nextSessionStart,
+      SessionStart: [
+        ...sessionStart,
+        { matcher: '', hooks: [{ type: 'command', command: hook_command }] },
+      ],
     },
   }
 
+  mkdirSync(dirname(settings_path), { recursive: true })
   writeFileSync(settings_path, JSON.stringify(nextSettings, null, 2) + '\n', 'utf-8')
+  return true
+}
+
+export function installWakeupHook(home = homedir(), cwd = process.cwd()): InstallHooksResult {
+  const { hooks_dir, hook_path, settings_path: global_settings_path } = getClaudePaths(home)
+
+  mkdirSync(hooks_dir, { recursive: true })
+  writeFileSync(hook_path, getWakeupHookScript(), 'utf-8')
+  chmodSync(hook_path, 0o755)
+
+  const updated_global = injectHookEntry(global_settings_path, hook_path)
+
+  // Also inject into project-level .claude/settings.json if it exists or if we're in a git repo
+  const project_settings_path = join(cwd, '.claude', 'settings.json')
+  let updated_project = false
+  if (existsSync(project_settings_path)) {
+    updated_project = injectHookEntry(project_settings_path, hook_path)
+  }
 
   return {
     hook_path,
-    settings_path,
-    installed_command,
-    updated_settings: !exists,
+    global_settings_path,
+    project_settings_path: existsSync(project_settings_path) ? project_settings_path : null,
+    installed_command: hook_path,
+    updated_global,
+    updated_project,
   }
 }

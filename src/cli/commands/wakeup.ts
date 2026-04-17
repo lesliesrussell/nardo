@@ -40,7 +40,11 @@ export function registerWakeup(program: Command): void {
     .action(() => {
       const result = installWakeupHook()
       console.log(`Hook: ${result.hook_path}`)
-      console.log(`Settings: ${result.settings_path}`)
-      console.log(result.updated_settings ? 'Installed sessionStart hook.' : 'Hook already present.')
+      console.log(`Global settings: ${result.global_settings_path}`)
+      if (result.project_settings_path) {
+        console.log(`Project settings: ${result.project_settings_path}`)
+      }
+      const updated = result.updated_global || result.updated_project
+      console.log(updated ? 'Installed SessionStart hook.' : 'Hook already present.')
     })
 }
