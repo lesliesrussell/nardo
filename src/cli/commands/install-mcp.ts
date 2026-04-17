@@ -2,9 +2,16 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
+import { execSync } from 'child_process'
 import type { Command } from 'commander'
 
-const MCP_ENTRY = { command: 'nardo', args: ['mcp', '--serve'] }
+function resolveNardoPath(): string {
+  try {
+    return execSync('which nardo', { encoding: 'utf-8' }).trim()
+  } catch {
+    return 'nardo'
+  }
+}
 
 function loadSettings(path: string): Record<string, unknown> {
   if (!existsSync(path)) return {}
@@ -18,9 +25,13 @@ function loadSettings(path: string): Record<string, unknown> {
 export function installMcpServer(home = homedir()): {
   settings_path: string
   already_installed: boolean
+  nardo_path: string
 } {
   const settings_path = join(home, '.claude', 'settings.json')
   mkdirSync(join(home, '.claude'), { recursive: true })
+
+  const nardo_path = resolveNardoPath()
+  const entry = { command: nardo_path, args: ['mcp', '--serve'] }
 
   const settings = loadSettings(settings_path)
   const mcpServers = (settings.mcpServers && typeof settings.mcpServers === 'object')
@@ -28,19 +39,16 @@ export function installMcpServer(home = homedir()): {
     : {}
 
   if (mcpServers['nardo']) {
-    return { settings_path, already_installed: true }
+    return { settings_path, already_installed: true, nardo_path }
   }
 
   const next = {
     ...settings,
-    mcpServers: {
-      ...mcpServers,
-      nardo: MCP_ENTRY,
-    },
+    mcpServers: { ...mcpServers, nardo: entry },
   }
 
   writeFileSync(settings_path, JSON.stringify(next, null, 2) + '\n', 'utf-8')
-  return { settings_path, already_installed: false }
+  return { settings_path, already_installed: false, nardo_path }
 }
 
 export function registerInstallMcp(program: Command): void {
@@ -49,12 +57,13 @@ export function registerInstallMcp(program: Command): void {
     .description('Register nardo as a global MCP server in ~/.claude/settings.json')
     .action(() => {
       try {
-        const { settings_path, already_installed } = installMcpServer()
+        const { settings_path, already_installed, nardo_path } = installMcpServer()
         if (already_installed) {
           console.log(`nardo MCP server already registered in ${settings_path}`)
           console.log('Restart Claude Code to pick up any changes.')
         } else {
           console.log(`Registered nardo MCP server in ${settings_path}`)
+          console.log(`  command: ${nardo_path} mcp --serve`)
           console.log('Restart Claude Code — nardo tools will be available in every session.')
         }
         console.log('')
@@ -67,7 +76,7 @@ export function registerInstallMcp(program: Command): void {
           console.error(e.message)
           console.error('')
           console.error('Manual alternative — add this to ~/.claude/settings.json:')
-          console.error(JSON.stringify({ mcpServers: { nardo: MCP_ENTRY } }, null, 2))
+          console.error(JSON.stringify({ mcpServers: { nardo: { command: 'nardo', args: ['mcp', '--serve'] } } }, null, 2))
           process.exit(1)
         }
         throw e
