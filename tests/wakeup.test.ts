@@ -64,17 +64,13 @@ describe('installWakeupHook', () => {
     const first = setupProject(projectDir)
     expect(existsSync(first.project_settings_path)).toBe(true)
     expect(first.updated_hook).toBe(true)
-    expect(first.updated_mcp).toBe(true)
 
     const settings = JSON.parse(readFileSync(first.project_settings_path, 'utf-8')) as {
       hooks: { SessionStart: Array<{ hooks: Array<{ command: string }> }> }
-      mcpServers: { nardo: { command: string; args: string[] } }
     }
     expect(settings.hooks.SessionStart).toHaveLength(1)
-    expect(settings.mcpServers.nardo.args).toEqual(['mcp', '--serve'])
 
     const second = setupProject(projectDir)
     expect(second.updated_hook).toBe(false)
-    expect(second.updated_mcp).toBe(false)
   })
 })

@@ -13,8 +13,6 @@ export interface InstallHooksResult {
 export interface SetupProjectResult {
   project_settings_path: string
   updated_hook: boolean
-  updated_mcp: boolean
-  nardo_path: string
 }
 
 export function getClaudePaths(home = homedir()): {
@@ -105,19 +103,12 @@ function resolveNardoPath(): string {
   }
 }
 
-function injectMcpEntry(settings_path: string, nardo_path: string): boolean {
-  const settings = loadSettings(settings_path)
-  const mcpServers = (settings.mcpServers && typeof settings.mcpServers === 'object')
-    ? settings.mcpServers as Record<string, unknown>
-    : {}
-  if (mcpServers['nardo']) return false
-  mkdirSync(dirname(settings_path), { recursive: true })
-  writeFileSync(
-    settings_path,
-    JSON.stringify({ ...settings, mcpServers: { ...mcpServers, nardo: { command: nardo_path, args: ['mcp', '--serve'] } } }, null, 2) + '\n',
-    'utf-8'
-  )
-  return true
+function registerMcpGlobal(nardo_path: string): void {
+  try {
+    execSync(`claude mcp add --scope user nardo ${nardo_path} -- mcp --serve`, { stdio: 'pipe' })
+  } catch {
+    // already registered or claude not in PATH — not fatal
+  }
 }
 
 export function installWakeupHook(home = homedir()): InstallHooksResult {
@@ -128,6 +119,7 @@ export function installWakeupHook(home = homedir()): InstallHooksResult {
   chmodSync(hook_path, 0o755)
 
   const updated_global = injectHookEntry(global_settings_path, hook_path)
+  registerMcpGlobal(resolveNardoPath())
 
   return {
     hook_path,
@@ -142,9 +134,7 @@ export function setupProject(cwd = process.cwd()): SetupProjectResult {
   const project_settings_path = join(cwd, '.claude', 'settings.json')
   mkdirSync(join(cwd, '.claude'), { recursive: true })
 
-  const nardo_path = resolveNardoPath()
   const updated_hook = injectHookEntry(project_settings_path, hook_path)
-  const updated_mcp = injectMcpEntry(project_settings_path, nardo_path)
 
-  return { project_settings_path, updated_hook, updated_mcp, nardo_path }
+  return { project_settings_path, updated_hook }
 }

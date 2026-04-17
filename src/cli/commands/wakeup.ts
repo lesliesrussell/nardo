@@ -53,8 +53,7 @@ export function registerWakeup(program: Command): void {
       const result = setupProject()
       console.log(`Project settings: ${result.project_settings_path}`)
       if (result.updated_hook) console.log('Added SessionStart hook.')
-      if (result.updated_mcp) console.log(`Added nardo MCP server (${result.nardo_path}).`)
-      if (!result.updated_hook && !result.updated_mcp) console.log('Already configured.')
+      else console.log('Already configured.')
       console.log('Restart Claude Code to activate.')
     })
 }

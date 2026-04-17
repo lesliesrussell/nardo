@@ -105,36 +105,30 @@ Options:
 **One-time global setup** (run once after installing nardo):
 
 ```bash
-nardo install-hooks    # writes hook script + registers in ~/.claude/settings.json
+nardo install-hooks    # installs wake-up hook + registers nardo as global MCP server
 ```
 
 **Per-project setup** (run once in each repo you want nardo active):
 
 ```bash
-nardo setup            # injects wake-up hook + MCP server into .claude/settings.json
+nardo setup            # injects wake-up hook into this project's .claude/settings.json
 ```
 
-Then restart Claude Code. nardo tools (`nardo_search`, `nardo_add_drawer`, `nardo_kg_query`, etc.) will be available and L0+L1 wake-up context loads automatically on session start.
+Then restart Claude Code. nardo tools (`nardo_search`, `nardo_add_drawer`, `nardo_kg_query`, etc.) will be available in every session, and L0+L1 wake-up context loads automatically on start.
 
-> **Why two commands?** Claude Code project-level `.claude/settings.json` completely suppresses global `mcpServers`. Running `nardo setup` in a project writes both the hook and the MCP registration directly into the project settings so nothing gets overridden.
+> **How it works:** `install-hooks` registers nardo globally via `claude mcp add --scope user`, which writes to `~/.claude.json`. This makes nardo available in every project. `setup` adds the session-start hook to a project's `.claude/settings.json` so wake-up context loads when you open that repo.
+>
+> **Why not just `settings.json`?** Claude Code reads MCP servers from `~/.claude.json`, not from `settings.json`. Editing `mcpServers` in `settings.json` is silently ignored.
 
-**Manual alternative** — add to your project's `.claude/settings.json`:
+**Manual alternative:**
 
-```json
-{
-  "hooks": {
-    "SessionStart": [{ "matcher": "", "hooks": [{ "type": "command", "command": "/path/to/.claude/hooks/nardo_wakeup.sh" }] }]
-  },
-  "mcpServers": {
-    "nardo": {
-      "command": "/path/to/nardo",
-      "args": ["mcp", "--serve"]
-    }
-  }
-}
+```bash
+# Register MCP server globally:
+claude mcp add --scope user nardo $(which nardo) -- mcp --serve
+
+# Install the session-start hook:
+nardo install-hooks
 ```
-
-Use `which nardo` to get the absolute path — relative commands may not resolve in Claude Code's restricted PATH environment.
 
 ## CLI Reference
 
@@ -152,8 +146,8 @@ Use `which nardo` to get the absolute path — relative commands may not resolve
 | `import` | Import drawers from JSONL | `nardo import backup.jsonl` |
 | `init <path>` | Initialize project metadata and default config | `nardo init .` |
 | `wake-up` | Load memory layers (L0-L3) | `nardo wake-up` |
-| `install-hooks` | One-time global hook + settings setup | `nardo install-hooks` |
-| `setup` | Per-project hook + MCP registration | `nardo setup` |
+| `install-hooks` | One-time global hook + MCP setup | `nardo install-hooks` |
+| `setup` | Per-project wake-up hook registration | `nardo setup` |
 | `mcp --serve` | Start MCP server (stdio) | `nardo mcp --serve` |
 | `repair` | Interactive palace repair | `nardo repair` |
 | `dedup` | Remove near-duplicate drawers | `nardo dedup --threshold 0.15` |
