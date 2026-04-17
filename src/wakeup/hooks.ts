@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { join, dirname } from 'path'
+import { execSync } from 'child_process'
 
 export interface InstallHooksResult {
   hook_path: string
@@ -9,6 +10,7 @@ export interface InstallHooksResult {
   installed_command: string
   updated_global: boolean
   updated_project: boolean
+  updated_project_mcp: boolean
 }
 
 export function getClaudePaths(home = homedir()): {
@@ -91,6 +93,29 @@ function injectHookEntry(settings_path: string, hook_command: string): boolean {
   return true
 }
 
+function resolveNardoPath(): string {
+  try {
+    return execSync('which nardo', { encoding: 'utf-8' }).trim()
+  } catch {
+    return 'nardo'
+  }
+}
+
+function injectMcpEntry(settings_path: string, nardo_path: string): boolean {
+  const settings = loadSettings(settings_path)
+  const mcpServers = (settings.mcpServers && typeof settings.mcpServers === 'object')
+    ? settings.mcpServers as Record<string, unknown>
+    : {}
+  if (mcpServers['nardo']) return false
+  mkdirSync(dirname(settings_path), { recursive: true })
+  writeFileSync(
+    settings_path,
+    JSON.stringify({ ...settings, mcpServers: { ...mcpServers, nardo: { command: nardo_path, args: ['mcp', '--serve'] } } }, null, 2) + '\n',
+    'utf-8'
+  )
+  return true
+}
+
 export function installWakeupHook(home = homedir(), cwd = process.cwd()): InstallHooksResult {
   const { hooks_dir, hook_path, settings_path: global_settings_path } = getClaudePaths(home)
 
@@ -100,11 +125,14 @@ export function installWakeupHook(home = homedir(), cwd = process.cwd()): Instal
 
   const updated_global = injectHookEntry(global_settings_path, hook_path)
 
-  // Also inject into project-level .claude/settings.json if it exists or if we're in a git repo
+  // Inject into project-level .claude/settings.json (hook + mcpServers)
   const project_settings_path = join(cwd, '.claude', 'settings.json')
   let updated_project = false
+  let updated_project_mcp = false
   if (existsSync(project_settings_path)) {
+    const nardo_path = resolveNardoPath()
     updated_project = injectHookEntry(project_settings_path, hook_path)
+    updated_project_mcp = injectMcpEntry(project_settings_path, nardo_path)
   }
 
   return {
@@ -114,5 +142,6 @@ export function installWakeupHook(home = homedir(), cwd = process.cwd()): Instal
     installed_command: hook_path,
     updated_global,
     updated_project,
+    updated_project_mcp,
   }
 }

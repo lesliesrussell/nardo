@@ -46,5 +46,8 @@ export function registerWakeup(program: Command): void {
       }
       const updated = result.updated_global || result.updated_project
       console.log(updated ? 'Installed SessionStart hook.' : 'Hook already present.')
+      if (result.updated_project_mcp) {
+        console.log('Added nardo MCP server to project settings.')
+      }
     })
 }
