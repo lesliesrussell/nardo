@@ -72,7 +72,8 @@ export function startDashboardServer(opts: DashboardServerOptions): { url: strin
 
       if (path === '/api/drawers/recent') {
         const limit = parseInt(q['limit'] ?? '20', 10) || 20
-        return json(await handleRecentDrawers(palace_path, limit, q['wing']))
+        const sort = q['sort'] === 'asc' ? 'asc' : 'desc'
+        return json(await handleRecentDrawers(palace_path, limit, q['wing'], sort))
       }
 
       return json({ error: 'Not found' }, 404)

@@ -176,6 +176,12 @@
   .kg-conf { font-size: 10px; color: var(--dim); }
   #kg-empty { color: var(--dim); font-size: 12px; padding: 20px 0; }
 
+  .sort-toggle { display: flex; gap: 4px; margin-left: auto; }
+  .sort-btn { background: var(--border); border: none; color: var(--dim); font-family: inherit; font-size: 10px; padding: 3px 8px; border-radius: 3px; cursor: pointer; }
+  .sort-btn.active { background: rgba(121,192,255,0.15); color: var(--cyan); }
+  .section-header { display: flex; align-items: center; margin-bottom: 10px; }
+  .section-header .section-title { margin-bottom: 0; }
+
   /* Timeline */
   .timeline-group { margin-bottom: 20px; }
   .timeline-date { font-size: 11px; color: var(--cyan); margin-bottom: 8px; letter-spacing: 0.5px; }
@@ -222,7 +228,7 @@
           <div id="wing-chart"></div>
         </div>
         <div class="section">
-          <div class="section-title">Recent drawers</div>
+          <div class="section-header"><div class="section-title">Recent drawers</div><div class="sort-toggle" id="overview-sort"><button class="sort-btn active" data-sort="desc">newest</button><button class="sort-btn" data-sort="asc">oldest</button></div></div>
           <div id="recent-list" class="drawer-list"><div class="loading">loading…</div></div>
         </div>
       </div>
@@ -259,6 +265,7 @@
         </div>
       </div>
       <div id="tab-timeline" class="tab-content">
+        <div class="section-header"><div class="section-title">Timeline</div><div class="sort-toggle" id="timeline-sort"><button class="sort-btn active" data-sort="desc">newest</button><button class="sort-btn" data-sort="asc">oldest</button></div></div>
         <div id="timeline-content"><div class="loading">loading…</div></div>
       </div>
     </div>
@@ -268,6 +275,7 @@
 <script>
 // ── state ──────────────────────────────────────────────────────────────────
 let activeWing = null
+let sortOrder = 'desc'
 let allWings = []
 let allRooms = []
 let searchTimer = null
@@ -381,7 +389,7 @@ function renderWingChart() {
 async function loadRecentDrawers() {
   const el = document.getElementById('recent-list')
   el.innerHTML = '<div class="loading">loading…</div>'
-  let url = '/api/drawers/recent?limit=20'
+  let url = '/api/drawers/recent?limit=20&sort=' + sortOrder
   if (activeWing) url += '&wing=' + encodeURIComponent(activeWing)
   const data = await api(url)
   const drawers = data.drawers ?? []
@@ -582,7 +590,7 @@ async function loadTimeline() {
   timelineLoaded = true
 
   const el = document.getElementById('timeline-content')
-  let url = '/api/drawers/recent?limit=200'
+  let url = '/api/drawers/recent?limit=200&sort=' + sortOrder
   if (activeWing) url += '&wing=' + encodeURIComponent(activeWing)
   const data = await api(url)
   const drawers = data.drawers ?? []
@@ -621,9 +629,24 @@ document.querySelectorAll('.tab').forEach(tab => {
 })
 
 // ── init ───────────────────────────────────────────────────────────────────
+// Sort toggle handler
+function initSortToggles(containerId, reloadFn) {
+  const container = document.getElementById(containerId)
+  if (!container) return
+  container.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sortOrder = btn.dataset.sort
+      document.querySelectorAll('.sort-toggle .sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === sortOrder))
+      reloadFn()
+    })
+  })
+}
+
 loadStats()
 loadWings()
 loadRecentDrawers()
+initSortToggles('overview-sort', loadRecentDrawers)
+initSortToggles('timeline-sort', loadTimeline)
 </script>
 </body>
 </html>

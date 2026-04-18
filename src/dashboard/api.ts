@@ -176,17 +176,18 @@ export async function handleKgGraph(palace_path: string, wing?: string): Promise
   }
 }
 
-export async function handleRecentDrawers(palace_path: string, limit = 20, wing?: string): Promise<unknown> {
+export async function handleRecentDrawers(palace_path: string, limit = 20, wing?: string, sort: 'asc' | 'desc' = 'desc'): Promise<unknown> {
   try {
     const config = loadConfig()
     const db = await openPalaceDB(palace_path, config.palace.backend)
+    const order = sort === 'asc' ? 'ASC' : 'DESC'
     const rows = await db.all<{
       id: string; document: string; wing: string; room: string
       filed_at: string; source_file: string; importance: number
     }>(
       wing
-        ? `SELECT id, document, wing, room, filed_at, source_file, importance FROM drawers WHERE wing = ? ORDER BY filed_at DESC LIMIT ?`
-        : `SELECT id, document, wing, room, filed_at, source_file, importance FROM drawers ORDER BY filed_at DESC LIMIT ?`,
+        ? `SELECT id, document, wing, room, filed_at, source_file, importance FROM drawers WHERE wing = ? ORDER BY filed_at ${order} LIMIT ?`
+        : `SELECT id, document, wing, room, filed_at, source_file, importance FROM drawers ORDER BY filed_at ${order} LIMIT ?`,
       wing ? [wing, limit] : [limit],
     )
     await db.close()
