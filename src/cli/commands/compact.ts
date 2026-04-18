@@ -85,9 +85,18 @@ async function compactCollection(
 export function registerCompact(program: Command): void {
   program
     .command('compact')
-    .description('Rebuild HNSW indexes dropping deleted entries, rebuild FTS5 index when available')
-    .option('--palace <path>', 'Palace path override')
-    .option('--quiet', 'Suppress output')
+    .description(
+      'Reclaim disk space by rebuilding HNSW vector indexes and the FTS5 full-text index.\n\n' +
+      'When drawers are deleted (via "forget" or "dedup") their slots in the HNSW index file\n' +
+      'are marked as tombstones but not removed. Over time this wastes disk and slows queries.\n' +
+      'Compact rewrites both drawers.hnsw and closets.hnsw from scratch, renumbers labels,\n' +
+      'and (on SQLite) rebuilds the FTS5 table. Run this after bulk deletions.\n\n' +
+      'Examples:\n' +
+      '  nardo compact\n' +
+      '  nardo compact --quiet   # machine-readable (exits 0 on success, no output)'
+    )
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--quiet', 'Suppress all progress output (useful in scripts)')
     .action(async (opts: { palace?: string; quiet?: boolean }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path

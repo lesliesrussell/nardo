@@ -50,10 +50,20 @@ export function registerDashboard(program: Command): void {
 
   dashboard
     .command('start')
-    .description('Start the dashboard (daemon by default, use --foreground to block)')
-    .option('--port <port>', 'Port to listen on', '7432')
-    .option('--palace <path>', 'Palace path override')
-    .option('--foreground', 'Run in foreground (blocking, Ctrl+C to stop)')
+    .description(
+      'Start the nardo web dashboard.\n\n' +
+      'By default runs as a background daemon — the process detaches immediately,\n' +
+      'opens your browser, and writes a PID file so "nardo dashboard stop" can\n' +
+      'find and kill it later. Logs go to {palace}/.dashboard.log.\n\n' +
+      'Use --foreground to keep the process attached to your terminal (Ctrl+C stops it).\n\n' +
+      'Examples:\n' +
+      '  nardo dashboard start                  # daemon on port 7432\n' +
+      '  nardo dashboard start --port 8080      # daemon on a custom port\n' +
+      '  nardo dashboard start --foreground     # blocking, Ctrl+C to stop'
+    )
+    .option('--port <port>', 'Port to listen on (default 7432)', '7432')
+    .option('--palace <path>', 'Palace directory to serve (overrides config)')
+    .option('--foreground', 'Run in foreground — blocks terminal, Ctrl+C to stop')
     .action(async (opts: { port: string; palace?: string; foreground?: boolean }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
@@ -120,7 +130,14 @@ export function registerDashboard(program: Command): void {
 
   dashboard
     .command('stop')
-    .description('Stop the running dashboard')
+    .description(
+      'Stop the running nardo dashboard daemon.\n\n' +
+      'Reads the PID from {palace}/.dashboard.pid, sends SIGTERM, and removes\n' +
+      'the PID file. Handles stale PID files gracefully (reports and cleans up\n' +
+      'if the process is no longer running).\n\n' +
+      'Example:\n' +
+      '  nardo dashboard stop'
+    )
     .option('--palace <path>', 'Palace path override')
     .action(async (opts: { palace?: string }) => {
       const config = loadConfig()

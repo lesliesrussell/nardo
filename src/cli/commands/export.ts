@@ -13,10 +13,18 @@ import type { Collection } from '../../palace/client.js'
 export function registerExport(program: Command): void {
   program
     .command('export')
-    .description('Export all drawers to JSONL (stdout)')
-    .option('--palace <path>', 'Palace path override')
-    .option('--wing <name>', 'Export only this wing')
-    .option('--quiet', 'Suppress progress output to stderr')
+    .description(
+      'Dump all drawers to JSONL format on stdout for backup or migration.\n\n' +
+      'Each output line is a JSON object containing the drawer text, all metadata\n' +
+      'fields, and the embedding vector encoded as base64. The format is stable\n' +
+      'across palace versions and can be read back with "nardo import".\n\n' +
+      'Examples:\n' +
+      '  nardo export > backup.jsonl\n' +
+      '  nardo export --wing project > project-backup.jsonl'
+    )
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--wing <name>', 'Export only drawers in this wing instead of the entire palace')
+    .option('--quiet', 'Suppress progress messages written to stderr (stdout JSONL is unaffected)')
     .action(async (opts: { palace?: string; wing?: string; quiet?: boolean }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path

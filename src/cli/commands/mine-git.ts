@@ -75,15 +75,25 @@ function buildDocument(commit: Commit): string {
 export function registerMineGit(program: Command): void {
   program
     .command('mine-git [repo]')
-    .description('Mine git commit history into the palace')
-    .option('--palace <path>', 'Palace path override')
-    .option('--wing <name>', 'Wing name (default: git)')
-    .option('--room <name>', 'Room name (default: repo directory name)')
-    .option('--since <date>', 'Only commits after this date (YYYY-MM-DD)')
-    .option('--limit <n>', 'Max commits to mine')
-    .option('--with-diffs', 'Include changed-files summary (git show --stat)')
-    .option('--dry-run', 'Show what would be mined without writing')
-    .option('--quiet', 'Suppress per-commit output')
+    .description(
+      'Index a git repository\'s commit history into the palace.\n\n' +
+      'Reads commits via "git log", builds one drawer per commit containing the\n' +
+      'SHA, author, date, subject, and body. Re-running is safe: commits are\n' +
+      'identified by their SHA so already-indexed commits are skipped. The repo\n' +
+      'argument defaults to the current directory.\n\n' +
+      'Examples:\n' +
+      '  nardo mine-git .                          # index current repo\n' +
+      '  nardo mine-git ~/myproject --with-diffs   # include changed-files summary\n' +
+      '  nardo mine-git . --since 2025-01-01       # only commits since a date'
+    )
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--wing <name>', 'Wing to file commits under (default: git)')
+    .option('--room <name>', 'Room within the wing (default: repository directory name)')
+    .option('--since <date>', 'Only index commits after this date in YYYY-MM-DD format')
+    .option('--limit <n>', 'Maximum number of commits to index (most recent first)')
+    .option('--with-diffs', 'Append a "git show --stat" changed-files summary to each commit document')
+    .option('--dry-run', 'Print the first 5 commits that would be indexed without writing anything')
+    .option('--quiet', 'Suppress per-commit log lines; print only the final summary')
     .action(async (repo: string | undefined, opts: {
       palace?: string
       wing?: string

@@ -28,10 +28,21 @@ function decodeEmbedding(b64: string): number[] {
 export function registerImport(program: Command): void {
   program
     .command('import <file>')
-    .description('Import drawers from a JSONL backup file')
-    .option('--palace <path>', 'Palace path override')
-    .option('--dry-run', 'Show what would be imported without writing')
-    .option('--quiet', 'Suppress progress output')
+    .description(
+      'Load drawers from a JSONL backup file into the palace.\n\n' +
+      'Reads each line of a file produced by "nardo export", deduplicates by\n' +
+      'SHA-256 of the document text (identical content already in the palace is\n' +
+      'skipped), preserves original drawer IDs when possible, and re-uses the\n' +
+      'stored embeddings so no re-embedding is needed. Pass "-" as the file\n' +
+      'argument to read from stdin.\n\n' +
+      'Examples:\n' +
+      '  nardo import backup.jsonl\n' +
+      '  nardo import backup.jsonl --dry-run   # preview without writing\n' +
+      '  cat backup.jsonl | nardo import -'
+    )
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--dry-run', 'Count how many drawers would be imported without writing any to the palace')
+    .option('--quiet', 'Suppress per-line progress messages; print a single JSON summary line instead')
     .action(async (file: string, opts: { palace?: string; dryRun?: boolean; quiet?: boolean }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path

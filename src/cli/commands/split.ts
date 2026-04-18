@@ -6,8 +6,17 @@ import { join, dirname, basename } from 'path'
 export function registerSplit(program: Command): void {
   program
     .command('split <file>')
-    .description('Split a JSONL file with multiple conversations into per-session files')
-    .option('--output-dir <dir>', 'Output directory (default: same dir as input file)')
+    .description(
+      'Split a multi-conversation JSONL export file into one file per session.\n\n' +
+      'Detects session boundaries by looking for Claude/Anthropic system messages\n' +
+      '(type==="system") or ChatGPT UUID-keyed root objects. Each session is written\n' +
+      'to a separate file named <base>_session_001.jsonl, _002.jsonl, etc. Use this\n' +
+      'to prepare a bulk conversation export for "nardo mine --mode convos".\n\n' +
+      'Examples:\n' +
+      '  nardo split conversations.jsonl\n' +
+      '  nardo split conversations.jsonl --output-dir ./sessions'
+    )
+    .option('--output-dir <dir>', 'Directory to write the per-session files (default: same directory as the input file)')
     .action((file: string, opts: { outputDir?: string }) => {
       if (!existsSync(file)) {
         console.error(`File not found: ${file}`)

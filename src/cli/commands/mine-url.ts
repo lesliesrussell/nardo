@@ -42,13 +42,23 @@ function stripHtml(html: string): string {
 export function registerMineUrl(program: Command): void {
   program
     .command('mine-url <url>')
-    .description('Fetch a webpage and mine it into the palace')
-    .option('--palace <path>', 'Palace path override')
-    .option('--wing <name>', 'Wing name (default: URL hostname)')
-    .option('--room <name>', 'Room name (default: web)')
-    .option('--force', 'Re-mine even if URL was already mined')
-    .option('--dry-run', 'Show chunks without writing')
-    .option('--quiet', 'Suppress output')
+    .description(
+      'Fetch a webpage, strip its HTML, chunk the text, and store it in the palace.\n\n' +
+      'Strips scripts, styles, and tags; splits the plain text into overlapping\n' +
+      'chunks; embeds each chunk; and files them as drawers. Wing defaults to the\n' +
+      'URL hostname, room defaults to "web". Re-running is skipped unless --force\n' +
+      'is passed, since the URL is used as the source_file dedup key.\n\n' +
+      'Examples:\n' +
+      '  nardo mine-url https://docs.example.com/guide\n' +
+      '  nardo mine-url https://example.com --wing docs --room api\n' +
+      '  nardo mine-url https://example.com --force   # re-fetch and re-mine'
+    )
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--wing <name>', 'Wing to file the page chunks under (default: URL hostname without www.)')
+    .option('--room <name>', 'Room within the wing (default: web)')
+    .option('--force', 'Delete existing drawers for this URL and re-mine from a fresh fetch')
+    .option('--dry-run', 'Show how many chunks would be filed without writing anything')
+    .option('--quiet', 'Suppress all progress output')
     .action(async (url: string, opts: {
       palace?: string
       wing?: string

@@ -7,8 +7,16 @@ import { loadConfig } from '../../config.js'
 export function registerStatus(program: Command): void {
   program
     .command('status')
-    .description('Show palace statistics')
-    .option('--palace <path>', 'Palace path override')
+    .description(
+      'Show a quick summary of the palace: drawer count, wings, and rooms.\n\n' +
+      'Connects to the palace database and prints total drawers, how many wings\n' +
+      'and rooms exist, and a breakdown of drawer counts per wing and room sorted\n' +
+      'by size. Use "nardo palace-stats" for a more detailed report including disk\n' +
+      'usage and FTS5 health.\n\n' +
+      'Example:\n' +
+      '  nardo status'
+    )
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
     .action(async (opts: { palace?: string }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path

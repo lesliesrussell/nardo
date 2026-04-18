@@ -16,17 +16,28 @@ import * as wal from '../../wal.js'
 export function registerMine(program: Command): void {
   program
     .command('mine <path>')
-    .description('Mine project files, conversations, or stdin (-) into the palace')
-    .option('--palace <path>', 'Palace path override')
-    .option('--wing <wing>', 'Wing name override')
-    .option('--mode <mode>', 'Ingest mode: project or convos', 'project')
-    .option('--agent <name>', 'Agent name for audit trail', 'cli')
-    .option('--limit <n>', 'Mine only first N files')
-    .option('--dry-run', 'Preview without writing')
-    .option('--no-gitignore', 'Ignore .gitignore patterns')
-    .option('--include-ignored <paths>', 'Force-include paths (comma-separated)')
-    .option('--source <id>', 'Source identifier for stdin mode (default: stdin:<timestamp>)')
-    .option('--room <room>', 'Room name for stdin mode (default: stdin)')
+    .description(
+      'Chunk, embed, and index files or conversation exports into the palace.\n\n' +
+      'In "project" mode (default), recursively reads source files in <path>,\n' +
+      'splits them into overlapping chunks, and stores them as drawers. Wing is\n' +
+      'read from nardo.yaml if present, otherwise derived from the directory name.\n' +
+      'In "convos" mode, reads .json/.md/.txt conversation exports and indexes\n' +
+      'each file as a conversation. Pass "-" as path to read plain text from stdin.\n\n' +
+      'Examples:\n' +
+      '  nardo mine . --wing myproject\n' +
+      '  nardo mine ~/exports --mode convos --wing conversations\n' +
+      '  echo "meeting notes" | nardo mine - --wing notes --room standups'
+    )
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--wing <wing>', 'Wing to file drawers under (default: from nardo.yaml or directory name)')
+    .option('--mode <mode>', 'Ingest mode: "project" for source files, "convos" for conversation exports (default: project)', 'project')
+    .option('--agent <name>', 'Agent label recorded in drawer metadata for audit trail (default: cli)', 'cli')
+    .option('--limit <n>', 'Stop after indexing the first N files (useful for testing)')
+    .option('--dry-run', 'Show what would be indexed without writing any drawers')
+    .option('--no-gitignore', 'Disable .gitignore filtering and index all files regardless of ignore rules')
+    .option('--include-ignored <paths>', 'Force-include specific comma-separated paths even if .gitignore excludes them')
+    .option('--source <id>', 'Source identifier recorded in metadata when reading from stdin (default: stdin:<timestamp>)')
+    .option('--room <room>', 'Room name when reading from stdin (default: stdin)')
     .action(
       async (
         targetPath: string,

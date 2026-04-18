@@ -9,12 +9,22 @@ import { installWakeupHook, setupProject } from '../../wakeup/hooks.js'
 export function registerWakeup(program: Command): void {
   program
     .command('wake-up')
-    .description('Show L0 + L1 wake-up context')
-    .option('--wing <wing>', 'Filter L1 to this wing')
-    .option('--palace <path>', 'Palace path override')
-    .option('--token-budget <n>', 'Max tokens for L1 output (default 800)', parseInt)
-    .option('--json', 'Output structured JSON')
-    .option('--quiet', 'Output L0 only')
+    .description(
+      'Print the wake-up context that nardo injects at the start of each Claude session.\n\n' +
+      'L0 is a short static summary of the project loaded from the palace config.\n' +
+      'L1 is a dynamic digest of recent high-importance drawers, budget-capped to\n' +
+      '--token-budget tokens. Together they orient Claude Code at session start\n' +
+      'without flooding the context window.\n\n' +
+      'Examples:\n' +
+      '  nardo wake-up\n' +
+      '  nardo wake-up --wing myproject --token-budget 400\n' +
+      '  nardo wake-up --json   # structured output for scripting'
+    )
+    .option('--wing <wing>', 'Restrict L1 digest to drawers in this wing')
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--token-budget <n>', 'Maximum tokens to include in the L1 digest (default: 800)', parseInt)
+    .option('--json', 'Output the wake-up payload as structured JSON instead of formatted text')
+    .option('--quiet', 'Output L0 only, skipping the L1 drawer digest')
     .action(async (opts: { wing?: string; palace?: string; tokenBudget?: number; json?: boolean; quiet?: boolean }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
@@ -36,7 +46,14 @@ export function registerWakeup(program: Command): void {
 
   program
     .command('install-hooks')
-    .description('Install nardo wake-up hook globally (~/.claude/settings.json)')
+    .description(
+      'Install the nardo SessionStart wake-up hook globally in ~/.claude/settings.json.\n\n' +
+      'After installation, Claude Code automatically runs "nardo wake-up" at the\n' +
+      'start of every session and injects the L0+L1 context into the conversation.\n' +
+      'Safe to run more than once — skips installation if the hook is already present.\n\n' +
+      'Example:\n' +
+      '  nardo install-hooks'
+    )
     .action(() => {
       const result = installWakeupHook()
       console.log(`Hook: ${result.hook_path}`)
@@ -48,7 +65,15 @@ export function registerWakeup(program: Command): void {
 
   program
     .command('setup')
-    .description('Register nardo hook + MCP server in this project (.claude/settings.json)')
+    .description(
+      'Register the nardo wake-up hook and MCP server for the current project.\n\n' +
+      'Writes a SessionStart hook and the nardo MCP server entry into\n' +
+      '.claude/settings.json in the current directory. Run this once per project\n' +
+      'after "nardo install-hooks" so Claude Code uses nardo in this project.\n' +
+      'Restart Claude Code after running.\n\n' +
+      'Example:\n' +
+      '  nardo setup'
+    )
     .action(() => {
       const result = setupProject()
       console.log(`Project settings: ${result.project_settings_path}`)

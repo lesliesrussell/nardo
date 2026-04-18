@@ -6,13 +6,22 @@ import { loadConfig } from '../../config.js'
 export function registerDedup(program: Command): void {
   program
     .command('dedup')
-    .description('Deduplicate drawers by cosine similarity within source groups')
-    .option('--threshold <n>', 'Cosine distance threshold (default 0.15)', '0.15')
-    .option('--dry-run', 'Preview without deleting')
-    .option('--stats', 'Show stats only (implies dry-run)')
-    .option('--wing <wing>', 'Scope to one wing')
-    .option('--source <pattern>', 'Filter by source_file pattern')
-    .option('--palace <path>', 'Palace path override')
+    .description(
+      'Find and remove near-duplicate drawers using cosine similarity.\n\n' +
+      'Compares drawers within each source group: pairs whose cosine distance is\n' +
+      'below --threshold are considered duplicates and the newer copy is deleted.\n' +
+      'Use --dry-run first to preview what would be removed before committing.\n\n' +
+      'Examples:\n' +
+      '  nardo dedup --dry-run          # preview duplicates without deleting\n' +
+      '  nardo dedup --threshold 0.10   # stricter: only near-exact duplicates\n' +
+      '  nardo dedup --wing sessions    # deduplicate one wing only'
+    )
+    .option('--threshold <n>', 'Cosine distance threshold — pairs closer than this are duplicates (default: 0.15)', '0.15')
+    .option('--dry-run', 'Show which drawers would be deleted without actually deleting them')
+    .option('--stats', 'Show duplicate counts only without deleting (implies --dry-run)')
+    .option('--wing <wing>', 'Restrict dedup to a single wing instead of the whole palace')
+    .option('--source <pattern>', 'Restrict dedup to drawers whose source_file matches this substring pattern')
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
     .action(async (opts: {
       threshold: string
       dryRun?: boolean

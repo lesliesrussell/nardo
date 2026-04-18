@@ -5,11 +5,21 @@ import { reembedPalace } from '../../palace/reembed.js'
 export function registerReembed(program: Command): void {
   program
     .command('reembed')
-    .description('Re-embed drawers and closets with the current configured model, rebuilding HNSW indexes')
-    .option('--palace <path>', 'Palace path override')
-    .option('--wing <wing>', 'Re-embed one wing only (only valid when dimension is unchanged)')
-    .option('--dry-run', 'Show what would be re-embedded without writing')
-    .option('--batch-size <n>', 'Embedding batch size', '16')
+    .description(
+      'Re-generate all embeddings using the currently configured model and rebuild HNSW indexes.\n\n' +
+      'Use this after changing the embedding model in nardo config. All drawer and closet\n' +
+      'texts are re-embedded in batches and the HNSW sidecar files are rebuilt from scratch.\n' +
+      'A backup of palace.sqlite3 is created before any writes. Currently requires the\n' +
+      'SQLite backend.\n\n' +
+      'Examples:\n' +
+      '  nardo reembed --dry-run          # preview what would be re-embedded\n' +
+      '  nardo reembed                    # full re-embed with current model\n' +
+      '  nardo reembed --wing sessions    # re-embed one wing only'
+    )
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--wing <wing>', 'Re-embed only this wing (only valid when embedding dimension has not changed)')
+    .option('--dry-run', 'Print a preview of counts and dimension change without writing anything')
+    .option('--batch-size <n>', 'Number of texts to embed per batch — larger is faster but uses more memory (default: 16)', '16')
     .action(async (opts: {
       palace?: string
       wing?: string

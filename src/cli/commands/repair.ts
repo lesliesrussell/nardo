@@ -7,9 +7,19 @@ export function registerRepair(program: Command): void {
   // nardo repair [--yes] [--palace PATH] — full rebuild
   program
     .command('repair')
-    .description('Full palace rebuild: scan, prune corrupt entries, and rebuild collection')
-    .option('--yes', 'Auto-confirm without interactive prompt')
-    .option('--palace <path>', 'Palace path override')
+    .description(
+      'Scan for corrupt drawers, prune them, and rebuild the palace collection.\n\n' +
+      'Runs the full repair pipeline: scans all drawers for corruption, prints a\n' +
+      'count of bad entries, then — if you confirm with --yes — deletes the corrupt\n' +
+      'drawers and rebuilds the collection from the remaining clean data. Without\n' +
+      '--yes it prints a summary and exits so you can review before committing.\n' +
+      'Currently requires the SQLite backend.\n\n' +
+      'Examples:\n' +
+      '  nardo repair           # scan and report; no changes made\n' +
+      '  nardo repair --yes     # scan, prune corrupt entries, and rebuild'
+    )
+    .option('--yes', 'Skip the confirmation prompt and proceed with pruning and rebuilding')
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
     .action(async (opts: { yes?: boolean; palace?: string }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
@@ -72,9 +82,19 @@ export function registerRepair(program: Command): void {
   // nardo repair-scan [--wing X] [--palace P]
   program
     .command('repair-scan')
-    .description('Scan for corrupt drawer IDs and write corrupt_ids.txt')
-    .option('--wing <wing>', 'Scope scan to one wing')
-    .option('--palace <path>', 'Palace path override')
+    .description(
+      'Scan all drawers for corruption and write bad IDs to corrupt_ids.txt.\n\n' +
+      'Checks every drawer in the palace (or a single wing with --wing) and\n' +
+      'reports how many are good vs corrupt. Bad drawer IDs are written to\n' +
+      '{palace}/corrupt_ids.txt for review. This command is read-only — no\n' +
+      'drawers are deleted. Run "nardo repair-prune --confirm" afterwards to\n' +
+      'remove the listed IDs. Requires the SQLite backend.\n\n' +
+      'Examples:\n' +
+      '  nardo repair-scan\n' +
+      '  nardo repair-scan --wing sessions'
+    )
+    .option('--wing <wing>', 'Restrict the scan to a single wing instead of the whole palace')
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
     .action(async (opts: { wing?: string; palace?: string }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
@@ -110,9 +130,18 @@ export function registerRepair(program: Command): void {
   // nardo repair-prune [--confirm] [--palace P]
   program
     .command('repair-prune')
-    .description('Delete corrupt IDs listed in corrupt_ids.txt')
-    .option('--confirm', 'Actually delete (default is dry-run)')
-    .option('--palace <path>', 'Palace path override')
+    .description(
+      'Delete the corrupt drawer IDs listed in corrupt_ids.txt.\n\n' +
+      'Reads {palace}/corrupt_ids.txt (produced by "nardo repair-scan") and\n' +
+      'deletes those drawers. Without --confirm it runs in dry-run mode and only\n' +
+      'prints the count. Pass --confirm to actually perform the deletions.\n' +
+      'Requires the SQLite backend.\n\n' +
+      'Examples:\n' +
+      '  nardo repair-prune             # dry-run: count corrupt IDs\n' +
+      '  nardo repair-prune --confirm   # delete the corrupt IDs'
+    )
+    .option('--confirm', 'Actually delete the corrupt IDs (without this flag the command is a dry-run)')
+    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
     .action(async (opts: { confirm?: boolean; palace?: string }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path
