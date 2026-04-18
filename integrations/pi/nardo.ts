@@ -100,7 +100,31 @@ export default function (pi: ExtensionAPI) {
       return { action: "handled" };
     }
 
-    ctx.ui.notify(`unknown: /nardo:${rest}  (search|add|status|wake)`, "warning");
+    if (rest === "help" || rest === "") {
+      ctx.ui.notify(
+        [
+          "nardo slash commands:",
+          "",
+          "  /nardo:search <query>   Search the palace for relevant memory.",
+          "                          Returns top 5 results ranked by similarity.",
+          "                          Example: /nardo:search hybrid search weights",
+          "",
+          "  /nardo:add <text>       Save a note to the palace (wing=agent, room=notes).",
+          "                          Example: /nardo:add decided to use postgres for this project",
+          "",
+          "  /nardo:status           Show palace stats: drawer count, wings, disk size.",
+          "",
+          "  /nardo:wake             Re-run nardo wake-up and refresh session memory.",
+          "                          Useful if you switched projects mid-session.",
+          "",
+          "  /nardo:help             Show this help.",
+        ].join("\n"),
+        "info",
+      );
+      return { action: "handled" };
+    }
+
+    ctx.ui.notify(`unknown command: /nardo:${rest} — type /nardo:help for usage`, "warning");
     return { action: "handled" };
   });
 }
