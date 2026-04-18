@@ -5,18 +5,20 @@ import { loadConfig } from '../../config.js'
 export function registerMcp(program: Command): void {
   program
     .command('mcp')
-    .description(
-      'Start the nardo MCP server or print setup instructions.\n\n' +
-      'Without --serve, prints the JSON snippet to add nardo to Claude Code manually\n' +
-      'and shows the one-command setup shortcut. With --serve, launches the stdio\n' +
-      'MCP server that Claude Code calls directly — you normally never run this\n' +
-      'yourself; it is invoked by the Claude Code MCP config entry.\n\n' +
-      'Examples:\n' +
-      '  nardo mcp              # print setup instructions\n' +
-      '  nardo mcp --serve      # start MCP server (used by Claude Code internally)'
-    )
-    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
-    .option('--serve', 'Start the stdio MCP server (invoked by Claude Code — not intended for direct use)')
+    .description('Start the nardo MCP server or print setup instructions')
+    .addHelpText('after', `
+Details:
+  Without --serve, prints the JSON snippet to add nardo to Claude Code manually
+  and shows the one-command setup shortcut. With --serve, launches the stdio
+  MCP server that Claude Code calls directly — you normally never run this
+  yourself; it is invoked by the Claude Code MCP config entry.
+
+Examples:
+  nardo mcp              # print setup instructions
+  nardo mcp --serve      # start MCP server (used by Claude Code internally)
+`)
+    .option('--palace <path>', 'Path to palace directory, overriding nardo config')
+    .option('--serve', 'Start the stdio MCP server (used by Claude Code internally)')
     .action(async (opts: { palace?: string; serve?: boolean }) => {
       const config = loadConfig()
       const palace_path = opts.palace ?? config.palace_path

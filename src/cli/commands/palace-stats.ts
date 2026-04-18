@@ -18,17 +18,19 @@ function fileSize(path: string): number {
 export function registerPalaceStats(program: Command): void {
   program
     .command('palace-stats')
-    .description(
-      'Show a detailed storage and index health report for the palace.\n\n' +
-      'Reports total drawer and closet counts, breakdown by wing/room/ingest-mode,\n' +
-      'date range, average importance score, FTS5 sync status (SQLite only), and\n' +
-      'disk usage for each palace file. Use this to understand the size and shape\n' +
-      'of your palace or to check for FTS drift after bulk operations.\n\n' +
-      'Examples:\n' +
-      '  nardo palace-stats\n' +
-      '  nardo palace-stats --json   # machine-readable output'
-    )
-    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .description('Show a detailed storage and index health report for the palace')
+    .addHelpText('after', `
+Details:
+  Reports total drawer and closet counts, breakdown by wing/room/ingest-mode,
+  date range, average importance score, FTS5 sync status (SQLite only), and
+  disk usage for each palace file. Use this to understand the size and shape
+  of your palace or to check for FTS drift after bulk operations.
+
+Examples:
+  nardo palace-stats
+  nardo palace-stats --json   # machine-readable output
+`)
+    .option('--palace <path>', 'Path to palace directory, overriding nardo config')
     .option('--json', 'Output the full stats report as a JSON object instead of formatted text')
     .action(async (opts: { palace?: string; json?: boolean }) => {
       const config = loadConfig()

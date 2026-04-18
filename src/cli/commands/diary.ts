@@ -15,21 +15,23 @@ import * as wal from '../../wal.js'
 export function registerDiary(program: Command): void {
   program
     .command('diary [content]')
-    .description(
-      'Store a quick journal entry in the palace with today\'s date as the room.\n\n' +
-      'Each entry is stored as a single drawer in the "diary" wing (no chunking).\n' +
-      'Room defaults to the current date (YYYY-MM-DD) so entries are naturally\n' +
-      'grouped by day. Use this for freeform notes, observations, or session logs.\n\n' +
-      'Examples:\n' +
-      '  nardo diary "Today I learned that X causes Y"\n' +
-      '  echo "long meeting notes..." | nardo diary --stdin\n' +
-      '  nardo diary "stand-up notes" --wing work --room meetings'
-    )
-    .option('--stdin', 'Read content from stdin rather than the positional argument (for piping)')
+    .description('Store a quick journal entry in the palace, grouped by date')
+    .addHelpText('after', `
+Details:
+  Each entry is stored as a single drawer in the "diary" wing (no chunking).
+  Room defaults to the current date (YYYY-MM-DD) so entries are naturally
+  grouped by day. Use this for freeform notes, observations, or session logs.
+
+Examples:
+  nardo diary "Today I learned that X causes Y"
+  echo "long meeting notes..." | nardo diary --stdin
+  nardo diary "stand-up notes" --wing work --room meetings
+`)
+    .option('--stdin', 'Read content from stdin rather than the positional argument')
     .option('--wing <name>', 'Wing to file the entry under (default: diary)', 'diary')
     .option('--room <name>', 'Room within the wing (default: today\'s date YYYY-MM-DD)')
-    .option('--importance <number>', 'Relevance score 0–2 used to surface this entry in wake-up context (default: auto-computed)')
-    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--importance <number>', 'Relevance score 0–2 (default: auto-computed)')
+    .option('--palace <path>', 'Path to palace directory, overriding nardo config')
     .action(
       async (
         contentArg: string | undefined,

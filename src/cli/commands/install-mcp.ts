@@ -30,15 +30,17 @@ export function installMcpServer(): { already_installed: boolean; nardo_path: st
 export function registerInstallMcp(program: Command): void {
   program
     .command('install-mcp')
-    .description(
-      'Register nardo as a global MCP server in Claude Code.\n\n' +
-      'Runs "claude mcp add --scope user nardo <path> -- mcp --serve" so that\n' +
-      'Claude Code automatically connects to nardo\'s MCP tools (nardo_search,\n' +
-      'nardo_add_drawer, etc.) in every session. Safe to run more than once —\n' +
-      'exits cleanly if already registered. Restart Claude Code after running.\n\n' +
-      'Example:\n' +
-      '  nardo install-mcp'
-    )
+    .description('Register nardo as a global MCP server in Claude Code')
+    .addHelpText('after', `
+Details:
+  Runs "claude mcp add --scope user nardo <path> -- mcp --serve" so that
+  Claude Code automatically connects to nardo's MCP tools (nardo_search,
+  nardo_add_drawer, etc.) in every session. Safe to run more than once —
+  exits cleanly if already registered. Restart Claude Code after running.
+
+Example:
+  nardo install-mcp
+`)
     .action(() => {
       try {
         const { already_installed, nardo_path } = installMcpServer()

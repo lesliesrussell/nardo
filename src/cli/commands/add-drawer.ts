@@ -10,22 +10,24 @@ import * as wal from '../../wal.js'
 export function registerAddDrawer(program: Command): void {
   program
     .command('add-drawer')
-    .description(
-      'Store a single text snippet directly into the palace as a drawer.\n\n' +
-      'Embeds the content, assigns metadata, and writes the drawer to the\n' +
-      'palace database. Primarily called by Claude Code hooks to persist\n' +
-      'session context automatically, but also useful for scripted ingestion.\n\n' +
-      'Examples:\n' +
-      '  nardo add-drawer --content "learned X today" --wing sessions\n' +
-      '  echo "long note..." | nardo add-drawer --content-stdin --wing notes --room 2025-01'
-    )
-    .option('--wing <wing>', 'Wing (namespace) to file the drawer under (default: sessions)', 'sessions')
-    .option('--room <room>', 'Room within the wing — groups related drawers (default: today\'s date YYYY-MM-DD)')
+    .description('Store a single text snippet directly into the palace as a drawer')
+    .addHelpText('after', `
+Details:
+  Embeds the content, assigns metadata, and writes the drawer to the palace
+  database. Primarily called by Claude Code hooks to persist session context
+  automatically, but also useful for scripted ingestion.
+
+Examples:
+  nardo add-drawer --content "learned X today" --wing sessions
+  echo "long note..." | nardo add-drawer --content-stdin --wing notes --room 2025-01
+`)
+    .option('--wing <wing>', 'Wing to file the drawer under', 'sessions')
+    .option('--room <room>', 'Room within the wing (default: today\'s date YYYY-MM-DD)')
     .option('--content <content>', 'Text content to store as the drawer body')
-    .option('--content-stdin', 'Read content from stdin instead of --content (for piping long text)')
-    .option('--source <source>', 'Source label recorded in metadata for provenance tracking (default: cli:add-drawer)', 'cli:add-drawer')
-    .option('--importance <number>', 'Relevance score 0–2; higher = surfaces more in wake-up context (default: auto-computed from content)')
-    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--content-stdin', 'Read content from stdin instead of --content')
+    .option('--source <source>', 'Source label recorded in metadata (default: cli:add-drawer)', 'cli:add-drawer')
+    .option('--importance <number>', 'Relevance score 0–2 (default: auto-computed from content)')
+    .option('--palace <path>', 'Path to palace directory, overriding nardo config')
     .action(
       async (opts: {
         wing: string

@@ -51,16 +51,18 @@ function sampleFiles(dir: string, maxFiles = 20): string[] {
 export function registerInit(program: Command): void {
   program
     .command('init <dir>')
-    .description(
-      'Interactively scaffold a nardo.yaml config for a project directory.\n\n' +
-      'Samples up to 20 source files in <dir> to detect entity names (people,\n' +
-      'projects), then prompts you to confirm them. Optionally maps top-level\n' +
-      'subdirectories to rooms. Writes a nardo.yaml that "nardo mine" uses to\n' +
-      'assign wings and rooms automatically.\n\n' +
-      'Examples:\n' +
-      '  nardo init .\n' +
-      '  nardo init ~/myproject'
-    )
+    .description('Interactively scaffold a nardo.yaml config for a project directory')
+    .addHelpText('after', `
+Details:
+  Samples up to 20 source files in <dir> to detect entity names (people,
+  projects), then prompts you to confirm them. Optionally maps top-level
+  subdirectories to rooms. Writes a nardo.yaml that "nardo mine" uses to
+  assign wings and rooms automatically.
+
+Examples:
+  nardo init .
+  nardo init ~/myproject
+`)
     .action(async (dir: string) => {
       console.log(`  Scanning for entities in: ${dir}`)
 

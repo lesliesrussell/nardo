@@ -19,20 +19,22 @@ const DEFAULT_DEBOUNCE_MS = 500
 export function registerWatch(program: Command): void {
   program
     .command('watch <path>')
-    .description(
-      'Watch a directory and automatically re-index files as they change.\n\n' +
-      'Uses the OS filesystem event API (FSEvents on macOS, inotify on Linux) to\n' +
-      'detect file creates, modifications, and deletes. Changed files are re-mined\n' +
-      'after a debounce delay; deleted files have their drawers removed. Only files\n' +
-      'with known readable extensions are processed; node_modules and similar\n' +
-      'directories are skipped. Wing is read from nardo.yaml if present.\n\n' +
-      'Examples:\n' +
-      '  nardo watch .\n' +
-      '  nardo watch ~/myproject --wing myproject --debounce 1000'
-    )
-    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .description('Watch a directory and automatically re-index files as they change')
+    .addHelpText('after', `
+Details:
+  Uses the OS filesystem event API (FSEvents on macOS, inotify on Linux) to
+  detect file creates, modifications, and deletes. Changed files are re-mined
+  after a debounce delay; deleted files have their drawers removed. Only files
+  with known readable extensions are processed; node_modules and similar
+  directories are skipped. Wing is read from nardo.yaml if present.
+
+Examples:
+  nardo watch .
+  nardo watch ~/myproject --wing myproject --debounce 1000
+`)
+    .option('--palace <path>', 'Path to palace directory, overriding nardo config')
     .option('--wing <name>', 'Wing to file drawers under (default: from nardo.yaml or directory name)')
-    .option('--debounce <ms>', `Milliseconds to wait after the last event before re-mining a file (default: ${DEFAULT_DEBOUNCE_MS})`)
+    .option('--debounce <ms>', `Milliseconds to wait after last event before re-mining (default: ${DEFAULT_DEBOUNCE_MS})`)
     .option('--quiet', 'Suppress per-file log lines (only errors are shown)')
     .action(
       async (

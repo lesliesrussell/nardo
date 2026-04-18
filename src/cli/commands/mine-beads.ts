@@ -141,24 +141,26 @@ async function mineIssues(
 export function registerMineBeads(program: Command): void {
   program
     .command('mine-beads')
-    .description(
-      'Index beads (bd) issues into the palace so they are searchable via MCP.\n\n' +
-      'Reads all issues from "bd list --all --json", builds a text document from\n' +
-      'each issue\'s fields, embeds it, and stores it as a drawer (wing=beads,\n' +
-      'room=issue_type). Re-running is safe: issues are skipped if their updated_at\n' +
-      'timestamp has not changed. Use --watch for continuous background indexing.\n\n' +
-      'Examples:\n' +
-      '  nardo mine-beads                        # index all issues\n' +
-      '  nardo mine-beads --id nardo-abc         # re-mine one issue\n' +
-      '  nardo mine-beads --watch --interval 30  # poll every 30 seconds'
-    )
-    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .description('Index beads (bd) issues into the palace so they are searchable via MCP')
+    .addHelpText('after', `
+Details:
+  Reads all issues from "bd list --all --json", builds a text document from
+  each issue's fields, embeds it, and stores it as a drawer (wing=beads,
+  room=issue_type). Re-running is safe: issues are skipped if their updated_at
+  timestamp has not changed. Use --watch for continuous background indexing.
+
+Examples:
+  nardo mine-beads                        # index all issues
+  nardo mine-beads --id nardo-abc         # re-mine one issue
+  nardo mine-beads --watch --interval 30  # poll every 30 seconds
+`)
+    .option('--palace <path>', 'Path to palace directory, overriding nardo config')
     .option('--wing <name>', 'Wing to file issues under (default: beads)', 'beads')
-    .option('--id <id>', 'Mine or re-mine a single issue by its beads ID (e.g. nardo-abc)')
+    .option('--id <id>', 'Mine or re-mine a single issue by its beads ID')
     .option('--status <filter>', 'Issue status filter: all, open, or closed (default: all)')
     .option('--watch', 'Poll beads continuously and re-index changed issues')
     .option('--interval <seconds>', `Seconds between polls in --watch mode (default: ${DEFAULT_WATCH_INTERVAL})`)
-    .option('--dry-run', 'List issues that would be mined without writing anything to the palace')
+    .option('--dry-run', 'List issues that would be mined without writing anything')
     .option('--quiet', 'Suppress per-issue log lines; print only the final summary')
     .action(async (opts: {
       palace?: string

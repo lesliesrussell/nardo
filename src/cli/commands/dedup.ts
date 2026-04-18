@@ -6,22 +6,24 @@ import { loadConfig } from '../../config.js'
 export function registerDedup(program: Command): void {
   program
     .command('dedup')
-    .description(
-      'Find and remove near-duplicate drawers using cosine similarity.\n\n' +
-      'Compares drawers within each source group: pairs whose cosine distance is\n' +
-      'below --threshold are considered duplicates and the newer copy is deleted.\n' +
-      'Use --dry-run first to preview what would be removed before committing.\n\n' +
-      'Examples:\n' +
-      '  nardo dedup --dry-run          # preview duplicates without deleting\n' +
-      '  nardo dedup --threshold 0.10   # stricter: only near-exact duplicates\n' +
-      '  nardo dedup --wing sessions    # deduplicate one wing only'
-    )
-    .option('--threshold <n>', 'Cosine distance threshold — pairs closer than this are duplicates (default: 0.15)', '0.15')
+    .description('Find and remove near-duplicate drawers using cosine similarity')
+    .addHelpText('after', `
+Details:
+  Compares drawers within each source group: pairs whose cosine distance is
+  below --threshold are considered duplicates and the newer copy is deleted.
+  Use --dry-run first to preview what would be removed before committing.
+
+Examples:
+  nardo dedup --dry-run          # preview duplicates without deleting
+  nardo dedup --threshold 0.10   # stricter: only near-exact duplicates
+  nardo dedup --wing sessions    # deduplicate one wing only
+`)
+    .option('--threshold <n>', 'Cosine distance threshold for duplicates (default: 0.15)', '0.15')
     .option('--dry-run', 'Show which drawers would be deleted without actually deleting them')
     .option('--stats', 'Show duplicate counts only without deleting (implies --dry-run)')
     .option('--wing <wing>', 'Restrict dedup to a single wing instead of the whole palace')
-    .option('--source <pattern>', 'Restrict dedup to drawers whose source_file matches this substring pattern')
-    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--source <pattern>', 'Restrict dedup to drawers whose source_file matches this pattern')
+    .option('--palace <path>', 'Path to palace directory, overriding nardo config')
     .action(async (opts: {
       threshold: string
       dryRun?: boolean

@@ -5,21 +5,23 @@ import { reembedPalace } from '../../palace/reembed.js'
 export function registerReembed(program: Command): void {
   program
     .command('reembed')
-    .description(
-      'Re-generate all embeddings using the currently configured model and rebuild HNSW indexes.\n\n' +
-      'Use this after changing the embedding model in nardo config. All drawer and closet\n' +
-      'texts are re-embedded in batches and the HNSW sidecar files are rebuilt from scratch.\n' +
-      'A backup of palace.sqlite3 is created before any writes. Currently requires the\n' +
-      'SQLite backend.\n\n' +
-      'Examples:\n' +
-      '  nardo reembed --dry-run          # preview what would be re-embedded\n' +
-      '  nardo reembed                    # full re-embed with current model\n' +
-      '  nardo reembed --wing sessions    # re-embed one wing only'
-    )
-    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
-    .option('--wing <wing>', 'Re-embed only this wing (only valid when embedding dimension has not changed)')
+    .description('Re-generate all embeddings with the current model and rebuild HNSW indexes')
+    .addHelpText('after', `
+Details:
+  Use this after changing the embedding model in nardo config. All drawer and
+  closet texts are re-embedded in batches and the HNSW sidecar files are
+  rebuilt from scratch. A backup of palace.sqlite3 is created before any
+  writes. Currently requires the SQLite backend.
+
+Examples:
+  nardo reembed --dry-run          # preview what would be re-embedded
+  nardo reembed                    # full re-embed with current model
+  nardo reembed --wing sessions    # re-embed one wing only
+`)
+    .option('--palace <path>', 'Path to palace directory, overriding nardo config')
+    .option('--wing <wing>', 'Re-embed only this wing (requires same embedding dimension)')
     .option('--dry-run', 'Print a preview of counts and dimension change without writing anything')
-    .option('--batch-size <n>', 'Number of texts to embed per batch — larger is faster but uses more memory (default: 16)', '16')
+    .option('--batch-size <n>', 'Texts to embed per batch — larger is faster but uses more memory (default: 16)', '16')
     .action(async (opts: {
       palace?: string
       wing?: string

@@ -9,19 +9,21 @@ import { installWakeupHook, setupProject } from '../../wakeup/hooks.js'
 export function registerWakeup(program: Command): void {
   program
     .command('wake-up')
-    .description(
-      'Print the wake-up context that nardo injects at the start of each Claude session.\n\n' +
-      'L0 is a short static summary of the project loaded from the palace config.\n' +
-      'L1 is a dynamic digest of recent high-importance drawers, budget-capped to\n' +
-      '--token-budget tokens. Together they orient Claude Code at session start\n' +
-      'without flooding the context window.\n\n' +
-      'Examples:\n' +
-      '  nardo wake-up\n' +
-      '  nardo wake-up --wing myproject --token-budget 400\n' +
-      '  nardo wake-up --json   # structured output for scripting'
-    )
+    .description('Print the L0+L1 wake-up context nardo injects at session start')
+    .addHelpText('after', `
+Details:
+  L0 is a short static summary of the project loaded from the palace config.
+  L1 is a dynamic digest of recent high-importance drawers, budget-capped to
+  --token-budget tokens. Together they orient Claude Code at session start
+  without flooding the context window.
+
+Examples:
+  nardo wake-up
+  nardo wake-up --wing myproject --token-budget 400
+  nardo wake-up --json   # structured output for scripting
+`)
     .option('--wing <wing>', 'Restrict L1 digest to drawers in this wing')
-    .option('--palace <path>', 'Path to palace directory, overriding the value in nardo config')
+    .option('--palace <path>', 'Path to palace directory, overriding nardo config')
     .option('--token-budget <n>', 'Maximum tokens to include in the L1 digest (default: 800)', parseInt)
     .option('--json', 'Output the wake-up payload as structured JSON instead of formatted text')
     .option('--quiet', 'Output L0 only, skipping the L1 drawer digest')
@@ -46,14 +48,17 @@ export function registerWakeup(program: Command): void {
 
   program
     .command('install-hooks')
-    .description(
-      'Install the nardo SessionStart wake-up hook globally in ~/.claude/settings.json.\n\n' +
-      'After installation, Claude Code automatically runs "nardo wake-up" at the\n' +
-      'start of every session and injects the L0+L1 context into the conversation.\n' +
-      'Safe to run more than once — skips installation if the hook is already present.\n\n' +
-      'Example:\n' +
-      '  nardo install-hooks'
-    )
+    .description('Install the nardo SessionStart wake-up hook globally')
+    .addHelpText('after', `
+Details:
+  Installs the hook in ~/.claude/settings.json. After installation, Claude Code
+  automatically runs "nardo wake-up" at the start of every session and injects
+  the L0+L1 context into the conversation. Safe to run more than once — skips
+  installation if the hook is already present.
+
+Example:
+  nardo install-hooks
+`)
     .action(() => {
       const result = installWakeupHook()
       console.log(`Hook: ${result.hook_path}`)
@@ -65,15 +70,17 @@ export function registerWakeup(program: Command): void {
 
   program
     .command('setup')
-    .description(
-      'Register the nardo wake-up hook and MCP server for the current project.\n\n' +
-      'Writes a SessionStart hook and the nardo MCP server entry into\n' +
-      '.claude/settings.json in the current directory. Run this once per project\n' +
-      'after "nardo install-hooks" so Claude Code uses nardo in this project.\n' +
-      'Restart Claude Code after running.\n\n' +
-      'Example:\n' +
-      '  nardo setup'
-    )
+    .description('Register the nardo wake-up hook and MCP server for the current project')
+    .addHelpText('after', `
+Details:
+  Writes a SessionStart hook and the nardo MCP server entry into
+  .claude/settings.json in the current directory. Run this once per project
+  after "nardo install-hooks" so Claude Code uses nardo in this project.
+  Restart Claude Code after running.
+
+Example:
+  nardo setup
+`)
     .action(() => {
       const result = setupProject()
       console.log(`Project settings: ${result.project_settings_path}`)
