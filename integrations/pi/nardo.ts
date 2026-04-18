@@ -2,6 +2,7 @@
  * nardo extension for pi-coding-agent
  *
  * Install: copy (or symlink) to ~/.pi/agent/extensions/nardo.ts
+ * Or from nardo project root: pi install .
  *
  * Provides:
  *   - Session start: loads nardo wake-up context (L0 + L1 memory)
@@ -13,26 +14,27 @@
  *       /nardo:wake             — re-run wake-up context
  */
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { spawnSync } from "node:child_process";
-
-function nardo(args: string[]): { ok: boolean; out: string } {
-  const result = spawnSync("nardo", args, { encoding: "utf-8", timeout: 15000 });
-  if (result.error) return { ok: false, out: result.error.message };
-  const out = (result.stdout ?? "").trim();
-  return { ok: result.status === 0, out };
-}
 
 export default function (pi: ExtensionAPI) {
   let wakeupContext = "";
   let firstTurn = true;
 
+  async function nardo(args: string[]): Promise<{ ok: boolean; out: string }> {
+    try {
+      const result = await pi.exec("nardo", args, { timeout: 15000 });
+      return { ok: result.code === 0, out: (result.stdout ?? "").trim() };
+    } catch (e) {
+      return { ok: false, out: String(e) };
+    }
+  }
+
   pi.on("session_start", async (_event, ctx) => {
-    const { ok, out } = nardo(["wake-up", "--token-budget", "600"]);
+    const { ok, out } = await nardo(["wake-up", "--token-budget", "600"]);
     if (ok && out) {
       wakeupContext = out;
       ctx.ui.notify("nardo: memory loaded", "info");
     } else {
-      ctx.ui.notify("nardo: wake-up failed", "warning");
+      ctx.ui.notify(`nardo: wake-up failed — ${out || "no output"}`, "warning");
     }
   });
 
@@ -46,7 +48,7 @@ export default function (pi: ExtensionAPI) {
 
     const prompt = (event as { prompt?: string }).prompt?.trim();
     if (prompt) {
-      const { ok, out } = nardo(["search", prompt, "--limit", "3"]);
+      const { ok, out } = await nardo(["search", prompt, "--limit", "3"]);
       if (ok && out) {
         parts.push("## nardo: relevant context\n\n" + out);
       }
@@ -69,31 +71,31 @@ export default function (pi: ExtensionAPI) {
 
     if (rest.startsWith("search ")) {
       const query = rest.slice(7).trim();
-      const { ok, out } = nardo(["search", query, "--limit", "5"]);
+      const { ok, out } = await nardo(["search", query, "--limit", "5"]);
       ctx.ui.notify(ok && out ? out : "No results", "info");
       return { action: "handled" };
     }
 
     if (rest.startsWith("add ")) {
       const content = rest.slice(4).trim();
-      const { ok } = nardo(["add-drawer", "--content", content, "--wing", "agent", "--room", "notes"]);
-      ctx.ui.notify(ok ? "nardo: saved" : "nardo: save failed", ok ? "info" : "error");
+      const { ok, out } = await nardo(["add-drawer", "--content", content, "--wing", "agent", "--room", "notes"]);
+      ctx.ui.notify(ok ? "nardo: saved" : `nardo: save failed — ${out}`, ok ? "info" : "error");
       return { action: "handled" };
     }
 
     if (rest === "status") {
-      const { ok, out } = nardo(["status"]);
+      const { ok, out } = await nardo(["status"]);
       ctx.ui.notify(ok && out ? out : "nardo: status failed", ok ? "info" : "error");
       return { action: "handled" };
     }
 
     if (rest === "wake") {
-      const { ok, out } = nardo(["wake-up", "--token-budget", "600"]);
+      const { ok, out } = await nardo(["wake-up", "--token-budget", "600"]);
       if (ok && out) {
         wakeupContext = out;
         ctx.ui.notify("nardo: memory refreshed", "info");
       } else {
-        ctx.ui.notify("nardo: wake-up failed", "warning");
+        ctx.ui.notify(`nardo: wake-up failed — ${out}`, "warning");
       }
       return { action: "handled" };
     }
