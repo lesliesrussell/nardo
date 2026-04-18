@@ -53,5 +53,7 @@ export function registerDashboard(program: Command): void {
       // Keep process alive
       void server
       await new Promise<void>(resolve => process.on('SIGINT', resolve))
+      server.stop()
+      process.exit(0)
     })
 }
