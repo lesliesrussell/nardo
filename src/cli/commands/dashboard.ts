@@ -67,6 +67,10 @@ export function registerDashboard(program: Command): void {
       }
 
       if (opts.foreground) {
+        // If spawned as daemon, write our own PID so parent gets the correct value
+        const pidFilePath = process.env.NARDO_DASHBOARD_PID_FILE
+        if (pidFilePath) writeFileSync(pidFilePath, String(process.pid))
+
         let url: string
         let server: ReturnType<typeof import('../../dashboard/server.js').startDashboardServer>['server']
         try {
@@ -86,6 +90,7 @@ export function registerDashboard(program: Command): void {
       } else {
         // Daemon: spawn detached child running this same entry point with --foreground
         const { spawn } = await import('node:child_process')
+        const pf = pidFile(palace_path)
         const logFd = openSync(logFile(palace_path), 'a')
         const spawnArgs = [process.argv[1], 'dashboard', 'start', '--foreground', '--port', String(port)]
         if (opts.palace) spawnArgs.push('--palace', opts.palace)
@@ -93,17 +98,19 @@ export function registerDashboard(program: Command): void {
         const child = spawn(process.argv[0], spawnArgs, {
           detached: true,
           stdio: ['ignore', logFd, logFd],
-          env: process.env,
+          env: { ...process.env, NARDO_DASHBOARD_PID_FILE: pf },
         })
         child.unref()
 
-        writeFileSync(pidFile(palace_path), String(child.pid))
+        // Wait briefly for child to write its own PID, then read it back
+        await new Promise(r => setTimeout(r, 300))
+        const actualPid = existsSync(pf) ? readFileSync(pf, 'utf-8').trim() : String(child.pid)
 
         const url = `http://localhost:${port}`
         console.log(`\n  nardo dashboard started`)
         console.log(`  palace: ${palace_path}`)
         console.log(`  url:    ${url}`)
-        console.log(`  pid:    ${child.pid}`)
+        console.log(`  pid:    ${actualPid}`)
         console.log(`  log:    ${logFile(palace_path)}`)
         console.log(`\n  Stop with: nardo dashboard stop\n`)
         await openBrowser(url)
