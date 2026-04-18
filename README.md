@@ -146,7 +146,9 @@ nardo install-hooks
 | `import` | Import drawers from JSONL | `nardo import backup.jsonl` |
 | `init <path>` | Initialize project metadata and default config | `nardo init .` |
 | `wake-up` | Load memory layers (L0-L3) | `nardo wake-up` |
-| `dashboard` | Start the web dashboard (default port 7432) | `nardo dashboard --port 7432` |
+| `dashboard start` | Start the web dashboard as a background daemon | `nardo dashboard start` |
+| `dashboard start --foreground` | Start dashboard in foreground (Ctrl+C to stop) | `nardo dashboard start --foreground --port 8080` |
+| `dashboard stop` | Stop the running dashboard daemon | `nardo dashboard stop` |
 | `install-hooks` | One-time global hook + MCP setup | `nardo install-hooks` |
 | `install-mcp` | Register nardo as global MCP server | `nardo install-mcp` |
 | `setup` | Per-project setup (injects hook + local MCP) | `nardo setup` |
@@ -546,6 +548,27 @@ src/
 ├── config.ts               # Configuration loader
 ├── wal.ts                  # Write-ahead log
 └── index.ts                # Main entry
+```
+
+## Integrations
+
+### pi-coding-agent
+
+A nardo extension for [pi-coding-agent](https://github.com/badlogic/pi-mono) is included at `integrations/pi/nardo.ts`.
+
+**What it does:**
+- Loads nardo wake-up context (L0+L1 memory) at session start
+- Auto-searches nardo before each agent turn and injects relevant context
+- Adds slash commands: `/nardo:search`, `/nardo:add`, `/nardo:status`, `/nardo:wake`, `/nardo:help`
+
+**Install:**
+```bash
+cp integrations/pi/nardo.ts ~/.pi/agent/extensions/nardo.ts
+```
+
+Or install the whole nardo package into pi:
+```bash
+pi install /path/to/nardo
 ```
 
 ## Limitations and Future Work
